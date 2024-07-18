@@ -1,0 +1,10 @@
+matplotlib==3.8.4
+mne==1.7.1
+mne_bids==0.15.0
+numpy==2.0.0
+pandas==2.2.2
+pingouin==0.5.4
+scikit_learn==1.4.2
+scipy==1.14.0
+seaborn==0.13.2
+statsmodels==0.14.1
