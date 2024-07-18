@@ -10,6 +10,13 @@ mne.set_log_level('ERROR')
 
 
 RANDOM_SEED = 42
+dropped_chans_default = {
+    'eeg':[],
+    'eog':'ALL',
+    'eyegaze':'ALL',
+    'pupil':'ALL',
+    'misc':'ALL'
+}
 
 class Wrangler:
     def __init__(
@@ -17,7 +24,7 @@ class Wrangler:
             data_dir,
             experiment_name,
             dropped_subs: list = [],
-            dropped_chans: list =[],
+            dropped_chans: dict = dropped_chans_default,
             trim_timepoints = None,
             sfreq: int = 1000,
             t_win: int = 50,
@@ -104,11 +111,10 @@ class Wrangler:
 
 
         # handle grouping here
-
-        if self.testing_groups is None and self.training_groups is not None:
-            self.testing_groups = self.training_groups
-        elif self.training_groups is None:
+        if self.training_groups is None:
             self.training_groups = [(cond) for cond in self.conditions]
+        if self.testing_groups is None:
+            self.testing_groups = self.training_groups
 
 
         self.group_dict = defaultdict(None)
