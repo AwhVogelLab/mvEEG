@@ -119,22 +119,22 @@ class Wrangler:
         self.group_dict = defaultdict(None)
         for igroup, group in enumerate(self.training_groups):
             for condition in self.conditions:
-                if all([subgroup in condition.split("/") for subgroup in group]):
+                if all([subgroup in condition.split("/") for subgroup in group.split("/")]):
                     self.group_dict[condition] = igroup
         for igroup, group in enumerate(self.testing_groups):
             if group not in self.training_groups:
                 for condition in self.conditions:
-                    if all([subgroup in condition.split("/") for subgroup in group]):
+                    if all([subgroup in condition.split("/") for subgroup in group.split("/")]):
                         self.group_dict[condition] = (
-                            2 + igroup
-                        )  # TODO: allow for more than 2 training conditions?
+                            len(training_groups) + igroup
+                        )  
 
         ## limit conditions to ONLY those present in group_dict
 
-        self.condition_dict = {
-            cond: self.condition_dict[cond] for cond in self.group_dict.keys()
-        }
-        self.conditions = list(self.group_dict.keys())
+        # self.condition_dict = {
+        #     cond: self.condition_dict[cond] for cond in self.group_dict.keys()
+        # }
+        # self.conditions = list(self.group_dict.keys())
 
         ## calculate general information about data
 
@@ -260,6 +260,9 @@ class Wrangler:
             xdata, ydata, n_trials_per=min_per_cond
         )
 
+        if self.trial_bin_size == 1: # don't bin
+            return xdata, ydata
+
         n_bins = xdata.shape[0] // self.trial_bin_size
 
         sortix = np.argsort(ydata)
@@ -287,7 +290,7 @@ class Wrangler:
         map_dict = {self.condition_dict[k]: v for k, v in self.group_dict.items()}
         return np.vectorize(map_dict.get)(ydata)
 
-    def bin_and_split(self, xdata, ydata):
+    def bin_and_split(self, xdata, ydata,test_size=0.2):
         """
         generator to handle trial binning and splitting into training and testing sets
         """
@@ -295,6 +298,6 @@ class Wrangler:
             xdata_binned, ydata_binned = self.bin_trials(xdata, ydata)
             ydata_binned = self._relabel_trials(ydata_binned)
             x_train, x_test, y_train, y_test = train_test_split(
-                xdata_binned, ydata_binned, test_size=0.2, stratify=ydata_binned
+                xdata_binned, ydata_binned, test_size=test_size, stratify=ydata_binned
             )
             yield x_train, x_test, y_train, y_test
