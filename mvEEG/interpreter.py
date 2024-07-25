@@ -20,29 +20,32 @@ import pingouin as pg
 class Interpreter:
     def __init__(
         self,
+        labels: list,
         data_dir: str,
         experiment_name: str,
         descriptions: list = [],
         subs: list = [],
     ):
-
+        self.labels = labels
         if len(subs) == 0:  # default to all subs
             subs = [str(s.name).strip("sub-") for s in Path(data_dir).glob("sub-*")]
         self.subs = subs
 
         if len(descriptions) == 0:  # default to every possible description present
             descriptions = np.unique(
-                [
-                    np.unique(
-                        [
-                            re.findall("desc-(.*)_", s.name)
-                            for s in Path(os.path.join(data_dir, f"sub-{sub}")).glob(
-                                "*.npy"
-                            )
-                        ]
-                    )
-                    for sub in self.subs
-                ]
+                np.concatenate(
+                    [
+                        np.unique(
+                            [
+                                re.findall("desc-(.*)_", s.name)
+                                for s in Path(os.path.join(data_dir, f"sub-{sub}","classification")).glob(
+                                    "*.npy"
+                                )
+                            ]
+                        )
+                        for sub in self.subs
+                    ]
+                )
             )
         self.descriptions = descriptions
 
@@ -53,6 +56,7 @@ class Interpreter:
             sub_path = mne_bids.BIDSPath(
                 root=data_dir,
                 task=experiment_name,
+                datatype="classification",
                 description=description,
                 extension=".npy",
                 check=False,
@@ -75,11 +79,8 @@ class Interpreter:
                     except FileNotFoundError:
                         loaded_data[dset].append(None)
 
-            for (
-                dset
-            ) in (
-                loaded_data.keys()
-            ):  # replace subjects without a certain value with a matrix of nans
+            for dset in loaded_data.keys():
+                 # replace subjects without a certain value with a matrix of nans
                 shape = np.unique(
                     [dat.shape for dat in loaded_data[dset] if dat is not None], axis=0
                 )
@@ -87,7 +88,7 @@ class Interpreter:
 
                     raise RuntimeError(f"Data files have inconsistent shapes: {shape}")
                 loaded_data[dset] = [
-                    dat if dat is not None else np.full(shape, np.nan)
+                    dat if dat is not None else np.full(shape.flatten(), np.nan)
                     for dat in loaded_data[dset]
                 ]
 
@@ -96,7 +97,7 @@ class Interpreter:
             )
 
             # check that our timing aligns
-            if len(np.unique(self.data_dict[description]["times"], axis=0)) > 1:
+            if len(np.unique(self.data_dict[description]["times"][np.isfinite(self.data_dict[description]["times"]).all(axis=1)], axis=0)) > 1:
                 raise ValueError("Time indices are not consistent across subjects")
             self.data_dict[description]["times"] = self.data_dict[description]["times"][
                 0
@@ -190,7 +191,7 @@ class Interpreter:
 
         return p, sig05
 
-    def get_data(self, dset=None, keys=[]):
+    def _get_data(self, dset=None, keys=[]):
         """
         Helper function that returns data from the internal dataset dictionary
 
@@ -206,7 +207,26 @@ class Interpreter:
         if len(keys) == 0:
             keys = self.data_dict[dset].keys()
 
-        return [self.data_dict[dset][key] for key in keys]
+
+        data_to_return = []
+        for key in keys:
+            result = self.data_dict[dset][key]
+            if len(result.shape) == 1: # 1-D data, eg times
+                data_to_return.append(result)
+            else:
+                result = result[np.isfinite(result).reshape(len(self.subs),-1).all(axis=1)]
+                # remove subs with nans
+                data_to_return.append(result)
+
+        if len(np.unique(result.shape for result in data_to_return)) > 1:
+            raise ValueError("Data files have inconsistent numbers of valid subjects")
+
+
+
+        if len(data_to_return) > 1:
+            return data_to_return
+        else:
+            return data_to_return[0]
 
     def plot_acc(
         self,
@@ -244,7 +264,7 @@ class Interpreter:
 
         # extract values and average over iterations
 
-        acc, acc_shuff, t = self.get_data(
+        acc, acc_shuff, t = self._get_data(
             dset, keys=["accuracy", "shuffledAccuracy", "times"]
         )
 
@@ -334,7 +354,7 @@ class Interpreter:
         sig_colors=["C0"],
     ):
 
-        confidence_scores, t = self.get_data(dset, keys=["confidenceScores", "times"])
+        confidence_scores, t = self._get_data(dset, keys=["confidenceScores", "times"])
 
         confidence_scores = confidence_scores.mean(1)
 
@@ -344,9 +364,13 @@ class Interpreter:
         stim_time = self.plot_stim_bar(ax=ax, stim_time=stim_time, ylim=ylim)
         ax.plot(t, np.zeros((len(t))), "--", color="gray")
 
-        for i in range(confidence_scores.shape[1]):
-            mean, upper, lower = self.get_plot_line(confidence_scores[:, i])
-            ax.plot(t, mean, color=self.colors[i], label=labels[i], linewidth=2)
+        condition_subset = [self.labels.index(label) for label in labels]
+        if len(condition_subset) == 0:
+            raise ValueError(f"No conditions were selected from {self.labels}")
+
+        for i,condition in enumerate(condition_subset):
+            mean, upper, lower = self.get_plot_line(confidence_scores[:, condition])
+            ax.plot(t, mean, color=self.colors[i], label=self.labels[i], linewidth=2)
             ax.fill_between(t, upper, lower, color=self.colors[i], alpha=0.5)
 
         leg = plt.legend(title=legend_title, loc=legend_pos, fontsize=12)
@@ -413,11 +437,28 @@ class Interpreter:
             label_text_x, arrow_ys[1], 0, 1, head_width=45, head_length=0.25, color="k"
         )
 
+
+    def _get_pair_from_label(self,pair):
+        """
+        Helper function to translate labeled pairs into numerical ones
+        """
+
+        if pair is None:
+            pair = [0, 1]
+        elif all([type(p) == int for p in pair]):
+            pair = pair
+        elif all([type(p) == str for p in pair]):
+            pair = [self.labels.index(p) for p in pair]
+        else:
+            raise ValueError("Invalid Conditions. Must be None, a list of ints, or a list of str")
+
+        return pair
+
     def plot_hyperplane_contrast(
         self,
         dset=None,
         ax=None,
-        pair=[0, 1],
+        pair=None,
         significance_testing=False,
         stim_time=[0, 200],
         title=None,
@@ -444,7 +485,9 @@ class Interpreter:
         label (str): label of line
         """
 
-        confidence_scores, t = self.get_data(dset, keys=["confidenceScores", "times"])
+        pair = self._get_pair_from_label(pair)
+
+        confidence_scores, t = self._get_data(dset, keys=["confidenceScores", "times"])
         contrast = np.mean(
             confidence_scores[:, :, pair[1]] - confidence_scores[:, :, pair[0]], axis=1
         )
@@ -492,7 +535,7 @@ class Interpreter:
 
             # labelling
             ax.set_xlabel("Time from stimulus onset (ms)", fontsize=14)
-            ax.set_ylabel("Classification accuracy", fontsize=14)
+            ax.set_ylabel("Hyperplane Contrast (a.u.)", fontsize=14)
             ax.text(
                 0.17,
                 0.9,
@@ -508,7 +551,7 @@ class Interpreter:
 
     def plot_confusion_matrix(
         self,
-        labels,
+        labels=None,
         dset=None,
         ax=None,
         earliest_t=200,
@@ -525,7 +568,7 @@ class Interpreter:
         self.conf_mat of shape [subjects,timepoints,folds,setsizeA,setsizeB]
         """
 
-        conf_mat, t = self.get_data(dset, keys=["confusionMatrix", "times"])
+        conf_mat, t = self._get_data(dset, keys=["confusionMatrix", "times"])
 
         if ax is None:
             _, ax = plt.subplots()
@@ -573,7 +616,7 @@ class Interpreter:
             labeltop=True,
             left=False,
         )
-        plt.title(title)
+        plt.suptitle(title)
 
         plt.tight_layout()
         return ax
@@ -605,7 +648,7 @@ class Interpreter:
             dset=dsets[0],
             color=colors[0],
             pair=pairs[0],
-            line_lab=labels[0],
+            label=labels[0],
             ax=ax,
             **kwargs,
         )
@@ -613,7 +656,7 @@ class Interpreter:
             dset=dsets[1],
             color=colors[1],
             pair=pairs[1],
-            line_lab=labels[1],
+            label=labels[1],
             ax=ax,
             skip_aesthetics=True,
             sig_y=-0.1,
@@ -622,14 +665,16 @@ class Interpreter:
         ax.legend(custom_lines, labels, loc="lower right", frameon=True, fontsize=11)
 
         if significance_between:
-            cs1, t = self.get_data(dsets[0], keys=["confidenceScores", "times"])
-            cs2 = self.get_data(dsets[1], keys=["confidenceScores"])
+            cs1, t = self._get_data(dsets[0], keys=["confidenceScores", "times"])
+            cs2 = self._get_data(dsets[1], keys=["confidenceScores"])
+            pair0 = self._get_pair_from_label(pairs[0])
+            pair1 = self._get_pair_from_label(pairs[1])
 
             contrast_1 = np.mean(
-                cs1[:, :, pairs[0][1]] - cs1[:, :, pairs[0][0]], axis=1
+                cs1[:, :, pair0[1]] - cs1[:, :, pair0[0]], axis=1
             )
             contrast_2 = np.mean(
-                cs2[:, :, pairs[1][1]] - cs2[:, :, pairs[1][0]], axis=1
+                cs2[:, :, pair1[1]] - cs2[:, :, pair1[0]], axis=1
             )
 
             p, sig05 = self.do_significance_testing(
@@ -666,20 +711,18 @@ class Interpreter:
         if ax is None:
             _, ax = plt.subplots()
 
-        cs1, t = self.get_data(dsets[0], keys=["confidenceScores", "times"])
-        cs2 = self.get_data(dsets[1], keys=["confidenceScores"])
+        cs1, t = self._get_data(dsets[0], keys=["confidenceScores", "times"])
+        cs2 = self._get_data(dsets[1], keys=["confidenceScores"])
+        pair0 = self._get_pair_from_label(pairs[0])
+        pair1 = self._get_pair_from_label(pairs[1])
 
         contrasts = [
-            np.mean(
-                cs1[:, :, pairs[0][1]][..., t > t_start]
-                - cs1[:, :, pairs[0][0]][..., t > t_start],
-                axis=1,
-            ),
-            np.mean(
-                cs2[:, :, pairs[1][1]][..., t > t_start]
-                - cs2[:, :, pairs[1][0]][..., t > t_start],
-                axis=1,
-            ),
+            np.mean(cs1[:, :, pair0[1]][..., t > t_start] 
+                    - cs1[:, :, pair0[0]][..., t > t_start],
+                    axis=(1,2)),
+            np.mean(cs2[:, :, pair1[1]][..., t > t_start]
+                    - cs2[:, :, pair1[0]][..., t > t_start],
+                    axis=(1,2))
         ]
 
         ax = sns.barplot(data=contrasts, errorbar="se", ax=ax, **kwargs)
@@ -693,7 +736,10 @@ class Interpreter:
 
         ax.plot([0, 1], [sig_y, sig_y], "k")
         ax.hlines(0, -0.5, 1.5, "gray", "--")
-        plt.axis("off")
+        ax.set_ylabel("Hyperplane Contrast (a.u.)")
+        
+        
+        plt.tight_layout()
 
         if p > 0.05:
             stars = "n.s."

@@ -7,7 +7,9 @@ from sklearn.metrics import confusion_matrix
 
 class Classifier:
 
-    def __init__(self, classifier=None, scaler=None):
+    def __init__(self, labels,classifier=None, scaler=None):
+        self.labels = labels
+        self.n_labels = len(labels)
         if classifier is not None:
             self.classifier = classifier
         else:
@@ -30,22 +32,21 @@ class Classifier:
 
         acc = self.classifier.score(X_test, y_test)
         acc_shuff = self.classifier.score(X_test, self.rng.permutation(y_test))
-        conf_mat = confusion_matrix(y_test, y_pred=self.classifier.predict(X_test))
+        conf_mat = confusion_matrix(y_test, y_pred=self.classifier.predict(X_test),labels = self.labels)
 
-        confidence_scores = np.full(len(set(y_test)), np.nan)
+        confidence_scores = np.full(self.n_labels, np.nan)
         confidence_scores_all = self.classifier.decision_function(X_test)
-        for i, ss in enumerate(set(y_test)):
+        for i, ss in enumerate(self.labels):
             confidence_scores[i] = confidence_scores_all[y_test == ss].mean()
 
         return acc, acc_shuff, conf_mat, confidence_scores
 
     def decode_across_time(self, X_train, X_test, y_train, y_test):
         ntimes = X_train.shape[2]
-        cm_n = len(set(y_train) | set(y_test))
         accs = np.full(ntimes, np.nan)
         accs_shuff = np.full(ntimes, np.nan)
-        conf_mats = np.full((cm_n, cm_n, ntimes), np.nan)
-        confidence_scores = np.full((len(set(y_test)), ntimes), np.nan)
+        conf_mats = np.full((self.n_labels, self.n_labels, ntimes), np.nan)
+        confidence_scores = np.full((self.n_labels, ntimes), np.nan)
 
         for itime in range(ntimes):
             (

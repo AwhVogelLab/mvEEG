@@ -62,8 +62,7 @@ class Wrangler:
         self.t_step = t_step
         self.trial_bin_size = trial_bin_size
         self.n_folds = n_folds
-        self.training_groups = training_groups
-        self.testing_groups = testing_groups
+
 
         self.condition_dict = condition_dict
         self.conditions = conditions
@@ -111,34 +110,39 @@ class Wrangler:
             self.conditions = list(self.condition_dict.keys())
 
         # handle grouping here
-        if self.training_groups is None:
-            self.training_groups = [(cond) for cond in self.conditions]
-        if self.testing_groups is None:
-            self.testing_groups = self.training_groups
+        if training_groups is None:
+            training_groups = [(cond) for cond in self.conditions]
+        if testing_groups is None:
+            testing_groups = training_groups
+
+        training_groups = [cond.split("/") if "/" in cond else cond for cond in training_groups] # split into subgroups
+        testing_groups = [cond.split("/") if "/" in cond else cond for cond in testing_groups]
+
+
+        self.training_conditions = []
+        self.testing_conditions = []
 
         self.group_dict = defaultdict(None)
-        for igroup, group in enumerate(self.training_groups):
+        for igroup, group in enumerate(training_groups):
             for condition in self.conditions:
-                if all([subgroup in condition.split("/") for subgroup in group.split("/")]):
+                if all([subgroup in condition.split("/") for subgroup in group]):
                     self.group_dict[condition] = igroup
-        for igroup, group in enumerate(self.testing_groups):
-            if group not in self.training_groups:
+                    self.training_conditions.append(condition)
+        for igroup, group in enumerate(testing_groups):
+            if group not in training_groups:
                 for condition in self.conditions:
-                    if all([subgroup in condition.split("/") for subgroup in group.split("/")]):
+                    if all([subgroup in condition.split("/") for subgroup in group]):
                         self.group_dict[condition] = (
                             len(training_groups) + igroup
-                        )  
+                        ) # offset by number of training groups
+                        self.testing_conditions.append(condition)
+            else:
+                for condition in self.conditions:
+                    if all([subgroup in condition.split("/") for subgroup in group]):
+                        self.testing_conditions.append(condition)
 
-        ## limit conditions to ONLY those present in group_dict
 
-        # self.condition_dict = {
-        #     cond: self.condition_dict[cond] for cond in self.group_dict.keys()
-        # }
-        # self.conditions = list(self.group_dict.keys())
 
-        ## calculate general information about data
-
-        ## generate an accurate group_dict that maps
 
     def load_eeg(self, isub, drop_chans_manual=[], reject=True, time_bin=True):
 
@@ -190,20 +194,27 @@ class Wrangler:
 
         return xdata, events
 
-    def _select_labels(self, xdata, ydata):
+    def _select_labels(self, xdata, ydata,labels=None,code_dict=None):
         """
-        selects only trials with labels in self.group_dict
+        selects only trials with labels in labels
         - i.e., trials that will be used for decoding later
         Args:
             xdata: np.ndarray, shape (n_trials,n_chans,n_timepoints)
             ydata: np.ndarray, shape (n_trials,)
+            labels: list of labels to include (defaults to all included in self.group_dict)
+            code_dict: dict, mapping labels to codes (defaults to self.condition_dict)
+                - alternatively set to self.group_dict to use group_dict for labels
 
         Returns:
             xdata: np.ndarray, shape (n_trials,n_chans,n_timepoints)
             ydata: np.ndarray, shape (n_trials,)
         """
+        if labels is None:
+            labels = self.group_dict.keys()
+        if code_dict is None:
+            code_dict = self.condition_dict
 
-        codes = [self.condition_dict[condition] for condition in self.group_dict.keys()]
+        codes = [code_dict[condition] for condition in labels]
         included_trials = np.in1d(ydata, codes)
 
         return xdata[included_trials], ydata[included_trials]
@@ -300,4 +311,11 @@ class Wrangler:
             x_train, x_test, y_train, y_test = train_test_split(
                 xdata_binned, ydata_binned, test_size=test_size, stratify=ydata_binned
             )
+
+            if self.training_conditions != self.testing_conditions:
+
+                x_train,y_train = self._select_labels(x_train,y_train,self.training_conditions,code_dict=self.group_dict)
+                x_test,y_test = self._select_labels(x_test,y_test,self.testing_conditions,code_dict=self.group_dict)
+
+
             yield x_train, x_test, y_train, y_test
