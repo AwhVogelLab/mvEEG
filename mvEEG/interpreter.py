@@ -7,6 +7,7 @@ import seaborn as sns
 import scipy.stats as sista
 import statsmodels as sm
 from statsmodels.stats.multitest import multipletests
+from .dataloader import DataLoader
 from pathlib import Path
 from collections import defaultdict
 
@@ -26,83 +27,14 @@ class Interpreter:
         descriptions: list = [],
         subs: list = [],
     ):
+        
+        self.dataset = DataLoader(root_dir=data_dir,
+                                  data_type="classification",
+                                  experiment_name=experiment_name,
+                                  descriptions=descriptions,
+                                  subs=subs)
+        
         self.labels = labels
-        if len(subs) == 0:  # default to all subs
-            subs = [str(s.name).strip("sub-") for s in Path(data_dir).glob("sub-*")]
-        self.subs = subs
-
-        if len(descriptions) == 0:  # default to every possible description present
-            descriptions = np.unique(
-                np.concatenate(
-                    [
-                        np.unique(
-                            [
-                                re.findall("desc-(.*)_", s.name)
-                                for s in Path(os.path.join(data_dir, f"sub-{sub}","classification")).glob(
-                                    "*.npy"
-                                )
-                            ]
-                        )
-                        for sub in self.subs
-                    ]
-                )
-            )
-        self.descriptions = descriptions
-
-        self.data_dict = {}
-
-        for description in self.descriptions:  # load in data
-
-            sub_path = mne_bids.BIDSPath(
-                root=data_dir,
-                task=experiment_name,
-                datatype="classification",
-                description=description,
-                extension=".npy",
-                check=False,
-            )
-
-            loaded_data = defaultdict(lambda: [])
-
-            for sub in subs:  # load each subject's data from disc
-                sub_path.update(subject=sub)
-                for dset in [
-                    "accuracy",
-                    "shuffledAccuracy",
-                    "confusionMatrix",
-                    "confidenceScores",
-                    "times",
-                ]:
-                    sub_path.update(suffix=dset)
-                    try:
-                        loaded_data[dset].append(np.load(sub_path.fpath))
-                    except FileNotFoundError:
-                        loaded_data[dset].append(None)
-
-            for dset in loaded_data.keys():
-                 # replace subjects without a certain value with a matrix of nans
-                shape = np.unique(
-                    [dat.shape for dat in loaded_data[dset] if dat is not None], axis=0
-                )
-                if (len(shape) > 1) and (len(loaded_data[dset]) > 1):
-
-                    raise RuntimeError(f"Data files have inconsistent shapes: {shape}")
-                loaded_data[dset] = [
-                    dat if dat is not None else np.full(shape.flatten(), np.nan)
-                    for dat in loaded_data[dset]
-                ]
-
-            self.data_dict.update(
-                {description: {k: np.stack(v) for k, v in loaded_data.items()}}
-            )
-
-            # check that our timing aligns
-            if len(np.unique(self.data_dict[description]["times"][np.isfinite(self.data_dict[description]["times"]).all(axis=1)], axis=0)) > 1:
-                raise ValueError("Time indices are not consistent across subjects")
-            self.data_dict[description]["times"] = self.data_dict[description]["times"][
-                0
-            ]
-
         self.colors = ["royalblue", "firebrick", "forestgreen", "orange", "purple"]
 
     @staticmethod
@@ -191,42 +123,7 @@ class Interpreter:
 
         return p, sig05
 
-    def _get_data(self, dset=None, keys=[]):
-        """
-        Helper function that returns data from the internal dataset dictionary
 
-        """
-        if dset is None:
-            if len(self.descriptions) > 1:
-                raise ValueError(
-                    f"Must specify dset if more than one run. Valid descriptions are {self.descriptions}"
-                )
-            else:
-                dset = self.descriptions[0]
-
-        if len(keys) == 0:
-            keys = self.data_dict[dset].keys()
-
-
-        data_to_return = []
-        for key in keys:
-            result = self.data_dict[dset][key]
-            if len(result.shape) == 1: # 1-D data, eg times
-                data_to_return.append(result)
-            else:
-                result = result[np.isfinite(result).reshape(len(self.subs),-1).all(axis=1)]
-                # remove subs with nans
-                data_to_return.append(result)
-
-        if len(np.unique(result.shape for result in data_to_return)) > 1:
-            raise ValueError("Data files have inconsistent numbers of valid subjects")
-
-
-
-        if len(data_to_return) > 1:
-            return data_to_return
-        else:
-            return data_to_return[0]
 
     def plot_acc(
         self,
@@ -264,7 +161,7 @@ class Interpreter:
 
         # extract values and average over iterations
 
-        acc, acc_shuff, t = self._get_data(
+        acc, acc_shuff, t = self.dataset.get_data(
             dset, keys=["accuracy", "shuffledAccuracy", "times"]
         )
 
@@ -354,7 +251,7 @@ class Interpreter:
         sig_colors=["C0"],
     ):
 
-        confidence_scores, t = self._get_data(dset, keys=["confidenceScores", "times"])
+        confidence_scores, t = self.dataset.get_data(dset, keys=["confidenceScores", "times"])
 
         confidence_scores = confidence_scores.mean(1)
 
@@ -487,7 +384,7 @@ class Interpreter:
 
         pair = self._get_pair_from_label(pair)
 
-        confidence_scores, t = self._get_data(dset, keys=["confidenceScores", "times"])
+        confidence_scores, t = self.dataset.get_data(dset, keys=["confidenceScores", "times"])
         contrast = np.mean(
             confidence_scores[:, :, pair[1]] - confidence_scores[:, :, pair[0]], axis=1
         )
@@ -568,7 +465,7 @@ class Interpreter:
         self.conf_mat of shape [subjects,timepoints,folds,setsizeA,setsizeB]
         """
 
-        conf_mat, t = self._get_data(dset, keys=["confusionMatrix", "times"])
+        conf_mat, t = self.dataset.get_data(dset, keys=["confusionMatrix", "times"])
 
         if ax is None:
             _, ax = plt.subplots()
@@ -665,8 +562,8 @@ class Interpreter:
         ax.legend(custom_lines, labels, loc="lower right", frameon=True, fontsize=11)
 
         if significance_between:
-            cs1, t = self._get_data(dsets[0], keys=["confidenceScores", "times"])
-            cs2 = self._get_data(dsets[1], keys=["confidenceScores"])
+            cs1, t = self.dataset.get_data(dsets[0], keys=["confidenceScores", "times"])
+            cs2 = self.dataset.get_data(dsets[1], keys=["confidenceScores"])
             pair0 = self._get_pair_from_label(pairs[0])
             pair1 = self._get_pair_from_label(pairs[1])
 
@@ -711,8 +608,8 @@ class Interpreter:
         if ax is None:
             _, ax = plt.subplots()
 
-        cs1, t = self._get_data(dsets[0], keys=["confidenceScores", "times"])
-        cs2 = self._get_data(dsets[1], keys=["confidenceScores"])
+        cs1, t = self.dataset.get_data(dsets[0], keys=["confidenceScores", "times"])
+        cs2 = self.dataset.get_data(dsets[1], keys=["confidenceScores"])
         pair0 = self._get_pair_from_label(pairs[0])
         pair1 = self._get_pair_from_label(pairs[1])
 
@@ -737,7 +634,7 @@ class Interpreter:
         ax.plot([0, 1], [sig_y, sig_y], "k")
         ax.hlines(0, -0.5, 1.5, "gray", "--")
         ax.set_ylabel("Hyperplane Contrast (a.u.)")
-        
+
         
         plt.tight_layout()
 
