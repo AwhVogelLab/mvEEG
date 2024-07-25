@@ -20,22 +20,17 @@ class DataLoader:
             subs = [str(s.name).strip("sub-") for s in Path(root_dir).glob("sub-*")]
         self.subs = subs
 
+        base_path = mne_bids.BIDSPath(
+            root=root_dir,
+            task=experiment_name,
+            datatype=data_type,
+            extension='.npy',
+            check=False)
+
         if len(descriptions) == 0:  # default to every possible description present
-            descriptions = np.unique(
-                np.concatenate(
-                    [
-                        np.unique(
-                            [
-                                re.findall("desc-(.*)_", s.name)
-                                for s in Path(os.path.join(root_dir, f"sub-{sub}",data_type)).glob(
-                                    "*.npy"
-                                )
-                            ]
-                        )
-                        for sub in self.subs
-                    ]
-                )
-            )
+            descriptions = np.unique([path.description for path in base_path.match()]).tolist()
+
+
         self.descriptions = descriptions
 
         self.data_dict = {}
@@ -43,31 +38,23 @@ class DataLoader:
 
         for description in self.descriptions:  # load in data
 
-            sub_path = mne_bids.BIDSPath(
-                root=root_dir,
-                task=experiment_name,
-                datatype=data_type,
+            sub_path = base_path.update(
                 description=description,
                 extension=".npy",
-                check=False,
+                check=False
             )
 
             loaded_data = defaultdict(lambda: [])
 
-            for sub in subs:  # load each subject's data from disc
-                sub_path.update(subject=sub)
-                for dset in [
-                    "accuracy",
-                    "shuffledAccuracy",
-                    "confusionMatrix",
-                    "confidenceScores",
-                    "times",
-                ]:
-                    sub_path.update(suffix=dset)
+            for dset in np.unique([path.suffix for path in sub_path.match()]): # all possible suffixes
+                sub_path.update(suffix=dset)
+                for path in sub_path.match():
                     try:
-                        loaded_data[dset].append(np.load(sub_path.fpath))
+                        loaded_data[dset].append(np.load(path.fpath))
                     except FileNotFoundError:
                         loaded_data[dset].append(None)
+
+
 
             for dset in loaded_data.keys():
                  # replace subjects without a certain value with a matrix of nans
