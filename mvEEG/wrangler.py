@@ -157,6 +157,7 @@ class Wrangler:
         chans_to_drop = self.chans_to_drop.copy()
         chans_to_drop.extend(drop_chans_manual)
 
+        chans_to_drop = [chan for chan in chans_to_drop if chan in epochs.ch_names]
         epochs.drop_channels(chans_to_drop)
 
         if self.sfreq != epochs.info["sfreq"]:  # resample if high sampling frequency
