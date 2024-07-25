@@ -49,10 +49,11 @@ class DataLoader:
             for dset in np.unique([path.suffix for path in sub_path.match()]): # all possible suffixes
                 sub_path.update(suffix=dset)
                 for path in sub_path.match():
-                    try:
-                        loaded_data[dset].append(np.load(path.fpath))
-                    except FileNotFoundError:
-                        loaded_data[dset].append(None)
+                    if path.subject in self.subs:
+                        try:
+                            loaded_data[dset].append(np.load(path.fpath))
+                        except FileNotFoundError:
+                            loaded_data[dset].append(None)
 
 
 
