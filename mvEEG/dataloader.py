@@ -41,11 +41,11 @@ class DataLoader:
             sub_path = base_path.update(
                 description=description,
                 extension=".npy",
-                check=False
+                check=False,
+                suffix=None
             )
 
             loaded_data = defaultdict(lambda: [])
-
             for dset in np.unique([path.suffix for path in sub_path.match()]): # all possible suffixes
                 sub_path.update(suffix=dset)
                 for path in sub_path.match():
@@ -96,6 +96,9 @@ class DataLoader:
         if len(keys) == 0:
             keys = self.data_dict[dset].keys()
 
+        if type(keys) is str:
+            keys = [keys]
+
 
         data_to_return = []
         for key in keys:
@@ -103,7 +106,7 @@ class DataLoader:
             if len(result.shape) == 1: # 1-D data, eg times
                 data_to_return.append(result)
             else:
-                result = result[np.isfinite(result).reshape(len(self.subs),-1).all(axis=1)]
+                result = result[np.isfinite(result).reshape(result.shape[0],-1).all(axis=1)]
                 # remove subs with nans
                 data_to_return.append(result)
 

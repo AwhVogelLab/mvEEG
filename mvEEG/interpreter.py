@@ -283,6 +283,14 @@ class Interpreter:
         plt.ylim(ylim)
 
         if significance_testing:
+            sig_pairs = [self._get_pair_from_label(pair) for pair in sig_pairs]
+            if len(alternatives) < len(sig_pairs):
+                alternatives = alternatives + [[alternatives[0]] * (len(sig_pairs) - len(alternatives))][0]
+            if len(sig_colors) < len(sig_pairs):
+                sig_colors = sig_colors + [f'C{i}' for i in range(len(sig_colors),len(sig_pairs))]
+            if len(sig_ys) < len(sig_pairs):
+                sig_ys = sig_ys + [sig_ys[-1] + 0.2 * i for i in range(len(sig_pairs)-len(sig_ys))]
+
             for pair, alternative, color, y in zip(
                 sig_pairs, alternatives, sig_colors, sig_ys
             ):
@@ -531,6 +539,7 @@ class Interpreter:
         sig_y_between=3,
         sig_color="C2",
         test_tail="two-sided",
+        sig_ys = [-0.5,-0.6],
         **kwargs,
     ):
 
@@ -547,6 +556,7 @@ class Interpreter:
             pair=pairs[0],
             label=labels[0],
             ax=ax,
+            sig_y = sig_ys[0],
             **kwargs,
         )
         self.plot_hyperplane_contrast(
@@ -556,7 +566,7 @@ class Interpreter:
             label=labels[1],
             ax=ax,
             skip_aesthetics=True,
-            sig_y=-0.1,
+            sig_y = sig_ys[1],
             **kwargs,
         )
         ax.legend(custom_lines, labels, loc="lower right", frameon=True, fontsize=11)
