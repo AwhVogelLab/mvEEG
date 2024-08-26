@@ -92,7 +92,7 @@ class Wrangler:
             else:
                 self.chans_to_drop.extend(self.dropped_chans[chan_type])
 
-        self.ch_names = np.setdiff1d(ch_names, self.chans_to_drop)
+        self.ch_names = np.setdiff1d(ch_names, self.chans_to_drop,assume_unique=True)
 
         ## make a condition dict if it doesn't exist
         if self.condition_dict is None:
