@@ -198,13 +198,13 @@ class Wrangler:
 
         if self.sfreq != epochs.info["sfreq"]:  # check if resampling options are valid. 
             if epochs.info["sfreq"] % self.sfreq != 0:
-                raise ValueError(f"Cannot resample EEG data to target frequency (not an integer multiple). 
-                                 Data sampling rate is {epochs.info['sfreq']} Hz,
-                                 but the requested sampling rate is {self.sfreq} Hz.")
+                raise ValueError("Cannot resample EEG data to target frequency (not an integer multiple)." + 
+                                 f"Data sampling rate is {epochs.info['sfreq']} Hz" + 
+                                 f"but the requested sampling rate is {self.sfreq} Hz.")
             if epochs.info["sfreq"] < self.sfreq:
-                raise ValueError(f"Cannot upsample EEG data. 
-                                 Data sampling rate is {epochs.info['sfreq']} Hz,
-                                 but the requested sampling rate is {self.sfreq} Hz.")
+                raise ValueError("Cannot upsample EEG data." +
+                                 f"Data sampling rate is {epochs.info['sfreq']} Hz" + 
+                                 f"but the requested sampling rate is {self.sfreq} Hz.")
 
             epochs = epochs.decimate(self.sfreq / epochs.info["sfreq"]) # resample by decimating
 
