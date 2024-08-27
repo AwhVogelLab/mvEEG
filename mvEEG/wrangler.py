@@ -318,5 +318,8 @@ class Wrangler:
                 x_train,y_train = self._select_labels(x_train,y_train,self.training_conditions,code_dict=self.group_dict)
                 x_test,y_test = self._select_labels(x_test,y_test,self.testing_conditions,code_dict=self.group_dict)
 
+            # equalize conditions one more time to avoid imabalances
+            x_train,y_train = self._equalize_conditions(x_train,y_train)
+            x_test,y_test = self._equalize_conditions(x_test,y_test)
 
             yield x_train, x_test, y_train, y_test
