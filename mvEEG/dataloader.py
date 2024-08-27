@@ -16,6 +16,8 @@ class CallableDefaultDict(dict):
 
     def __missing__(self, key):
         self[key] = self.default_factory(key)
+        if self[key] == []:
+            raise KeyError(f"Invalid key {key}")
         return self[key]
 
 
@@ -101,8 +103,8 @@ class DataLoader:
             if (
                 len(
                     np.unique(
-                        self._data_dict[description]["times"][
-                            np.isfinite(self._data_dict[description]["times"]).all(axis=1)
+                        loaded_data["times"][
+                            np.isfinite(loaded_data["times"]).all(axis=1)
                         ],
                         axis=0)
                 )
@@ -110,9 +112,13 @@ class DataLoader:
             ):
                 raise ValueError("Time indices are not consistent across subjects")
             
+            loaded_data["times"] = loaded_data["times"][0] # only need one copy of times
+
         if description not in self.descriptions: # add on to descriptions
             self.descriptions.append(description)
-        return loaded_data
+
+        
+        return dict(loaded_data) # return as a non-defaultdict
 
 
     def get_data(self,
