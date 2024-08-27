@@ -25,6 +25,7 @@ class Wrangler:
         self,
         data_dir,
         experiment_name,
+        included_subs: list = [],
         dropped_subs: list = [],
         dropped_chans: dict = dropped_chans_default,
         trim_timepoints=None,
@@ -52,9 +53,16 @@ class Wrangler:
 
         self.rng = np.random.default_rng(RANDOM_SEED)
 
-        self.subs = mne_bids.get_entity_vals(
-            self.bids_path.root, "subject", ignore_subjects=dropped_subs
-        )
+        if len(included_subs) == 0:  # default to all subs
+            self.subs = mne_bids.get_entity_vals(
+                self.bids_path.root, "subject", ignore_subjects=dropped_subs
+            )
+        else:
+            self.subs = included_subs
+            if any([sub in included_subs for sub in dropped_subs]):
+                raise ValueError("Included and dropped subjects overlap"+
+                                 f"subjects: {[sub for sub in dropped_subs if sub in included_subs]}")
+
         self.nsub = len(self.subs)
         self.sfreq = sfreq
         self.trim_timepoints = trim_timepoints
