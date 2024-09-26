@@ -123,8 +123,8 @@ class Wrangler:
         if testing_groups is None:
             testing_groups = training_groups
 
-        training_groups = [cond.split("/") if "/" in cond else cond for cond in training_groups] # split into subgroups
-        testing_groups = [cond.split("/") if "/" in cond else cond for cond in testing_groups]
+        training_groups = [cond.split("/") if "/" in cond else [cond] for cond in training_groups] # split into subgroups
+        testing_groups = [cond.split("/") if "/" in cond else [cond] for cond in testing_groups]
 
 
         self.training_conditions = []
