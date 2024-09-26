@@ -172,7 +172,12 @@ class Wrangler:
             assert (
                 epochs.info["sfreq"] % self.sfreq == 0
             ), "Cannot resample to desired frequency"
-            epochs = epochs.decimate(self.sfreq)
+
+            assert (
+                epochs.info["sfreq"] > self.sfreq
+            ), "Cannot upsample"
+            epochs = epochs.decimate(epochs.info["sfreq"] / self.sfreq)
+            
 
         if self.trim_timepoints is not None:  # crop trial duration
             epochs.crop(
