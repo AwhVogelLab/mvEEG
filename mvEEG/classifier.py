@@ -7,7 +7,7 @@ from sklearn.metrics import confusion_matrix
 
 class Classifier:
 
-    def __init__(self, labels,classifier=None, scaler=None):
+    def __init__(self, labels, classifier=None, scaler=None):
         self.labels = labels
         self.n_labels = len(labels)
         if classifier is not None:
@@ -21,18 +21,26 @@ class Classifier:
         self.rng = np.random.default_rng()
 
     def _standardize(self, X_train, X_test):
-        scaler = StandardScaler()
-        X_train = scaler.fit_transform(X_train)
-        X_test = scaler.transform(X_test)
+        X_train = self.scaler.fit_transform(X_train)
+        X_test = self.scaler.transform(X_test)
         return X_train, X_test
+
+    def _get_acc(self, X_test, y_train, y_test):
+        """
+        Helper function that computes accuracy, but only for test trials whose labels were present in the training set
+        """
+        preds = self.classifier.predict(X_test)
+        labeled_test = [i for i, y in enumerate(y_test) if y in np.unique(y_train)]
+        acc = np.mean(preds[labeled_test] == y_test[labeled_test])
+        return acc
 
     def _decode(self, X_train, X_test, y_train, y_test):
         X_train, X_test = self._standardize(X_train, X_test)
         self.classifier.fit(X_train, y_train)
 
-        acc = self.classifier.score(X_test, y_test)
-        acc_shuff = self.classifier.score(X_test, self.rng.permutation(y_test))
-        conf_mat = confusion_matrix(y_test, y_pred=self.classifier.predict(X_test),labels = self.labels)
+        acc = self._get_acc(X_test, y_train, y_test)
+        acc_shuff = self._get_acc(X_test, y_train, self.rng.permutation(y_test))
+        conf_mat = confusion_matrix(y_test, y_pred=self.classifier.predict(X_test), labels=self.labels)
 
         confidence_scores = np.full(self.n_labels, np.nan)
         confidence_scores_all = self.classifier.decision_function(X_test)
