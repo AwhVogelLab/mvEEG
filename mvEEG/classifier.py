@@ -34,9 +34,14 @@ class Classifier:
         acc = np.mean(preds[labeled_test] == y_test[labeled_test])
         return acc
 
-    def _decode(self, X_train, X_test, y_train, y_test):
-        X_train, X_test = self._standardize(X_train, X_test)
+    def _fit(self, X_train, y_train):
+        X_train, _ = self._standardize(X_train, X_train)
         self.classifier.fit(X_train, y_train)
+
+    def _decode(self, X_train, X_test, y_train, y_test, fit=True):
+        X_train, X_test = self._standardize(X_train, X_test)
+        if fit:
+            self.classifier.fit(X_train, y_train)
 
         acc = self._get_acc(X_test, y_train, y_test)
         acc_shuff = self._get_acc(X_test, y_train, self.rng.permutation(y_test))
@@ -63,5 +68,24 @@ class Classifier:
                 conf_mats[:, :, itime],
                 confidence_scores[:, itime],
             ) = self._decode(X_train[:, :, itime], X_test[:, :, itime], y_train, y_test)
+
+        return accs, accs_shuff, conf_mats, confidence_scores
+
+    def temporally_generalize(self, X_train, X_test, y_train, y_test):
+        ntimes = X_train.shape[2]
+        accs = np.full((ntimes, ntimes), np.nan)
+        accs_shuff = np.full((ntimes, ntimes), np.nan)
+        conf_mats = np.full((self.n_labels, self.n_labels, ntimes, ntimes), np.nan)
+        confidence_scores = np.full((self.n_labels, ntimes, ntimes), np.nan)
+
+        for itime in range(ntimes):  # train times
+            self._fit(X_train[:, :, itime], y_train)
+            for jtime in range(ntimes):  # test times
+                (
+                    accs[itime, jtime],
+                    accs_shuff[itime, jtime],
+                    conf_mats[:, :, itime, jtime],
+                    confidence_scores[:, itime, jtime],
+                ) = self._decode(X_train[:, :, itime], X_test[:, :, jtime], y_train, y_test, fit=False)
 
         return accs, accs_shuff, conf_mats, confidence_scores
