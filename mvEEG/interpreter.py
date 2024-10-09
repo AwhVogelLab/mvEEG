@@ -469,8 +469,16 @@ class Interpreter:
         """
         plots the confusion matrix for the classifier
 
-        Input:
-        self.conf_mat of shape [subjects,timepoints,folds,setsizeA,setsizeB]
+        Arguments:
+        dset (str): description of the condition to plot (can leave blank if only one condition)
+        labels (list of str): labels for the confusion matrix
+        ax (matplotlib axis): axis to plot into (creates if doesn't exist)
+        earliest_t (int): time to start plotting from (should be start of delay period)\
+        lower (float): lower bound of color map
+        upper (float): upper bound of color map
+        chance (float): chance level for plot (defaults to 0.5)
+        color_map (matplotlib color map): color map for plot
+        title (str): title of plot
         """
 
         conf_mat, t = self.dataset.get_data(dset, keys=["confusionMatrix", "times"])
@@ -542,6 +550,27 @@ class Interpreter:
         sig_ys = [-0.5,-0.6],
         **kwargs,
     ):
+        
+        """
+        Plots two hyperplane contrast graphs on the axis. Useful for comparing crosstraining.
+
+        Wrapper for plot_hyperplane_contrast
+
+        Arguments:
+        dsets (list of 2 str): descriptions of the conditions to plot. One per line
+        pairs (list of 2 tuples): pairs of conditions to compare. eg: [("C2",'C1"),("O2","O1")]. 
+        labels (list of 2 str): labels for the legend
+        colors (list of 2 str): colors for each line
+        ax (matplotlib axis): axis to plot into (creates if doesn't exist)
+        significance_between (bool): run significance testing between the two contrasts
+        sig_y_between (float): y position of significance dots
+        sig_color (str): color of significance dots
+        test_tail (str): tail of the test to run
+        sig_ys (list of 2 floats): y position of significance dots for 
+        Other kwargs are passed to plot_hyperplane_contrast
+
+
+        """
 
         if ax is None:
             _, ax = plt.subplots()
@@ -604,16 +633,34 @@ class Interpreter:
         pairs,
         labels,
         t_start=200,
-        colors=["C0", "C1"],
         ax=None,
         significance_between=False,
         sig_y=1,
-        sig_color="C2",
         test_tail="two-sided",
         ylim=None,
         title=None,
         **kwargs,
     ):
+        
+        """
+        Plots two hyperplane contrasts as a bar graph. Also computes the bayes-factor between the two.
+
+        Arguments:
+        dsets (list of 2 str): descriptions of the conditions to plot. One per line
+        pairs (list of 2 tuples): pairs of conditions to compare.
+          eg: [("C2",'C1"),("O2","O1")].
+          The second will be subtracted from the first
+        labels (list of 2 str): labels for the legend
+        t_start (int): time to start calculating the contrast from
+        ax (matplotlib axis): axis to plot into (creates if doesn't exist)
+        significance_between (bool): run significance testing between the two contrasts?
+        sig_y (float): y position of significance dots
+        test_tail (str): tail of the test to run (two-sided, greater, less)
+        ylim (list of 2 floats): y limits of figure
+        title (str): title of figure
+
+
+        """
 
         if ax is None:
             _, ax = plt.subplots()
@@ -632,32 +679,34 @@ class Interpreter:
                     axis=(1,2))
         ]
 
+
         ax = sns.barplot(data=contrasts, errorbar="se", ax=ax, **kwargs)
+        if ylim is not None:
+            ax.set_ylim(ylim)
+        ax.hlines(0, -0.5, 1.5, "gray", "--")
+        ax.set_ylabel("Hyperplane Contrast (a.u.)")
         ax.set_xticks([0, 1], labels)
+
+        plt.tight_layout()
 
         stats = pg.ttest(contrasts[0], contrasts[1], paired=True, alternative=test_tail)
         p = stats["p-val"].values[0]
 
-        if ylim is not None:
-            ax.set_ylim(ylim)
 
-        ax.plot([0, 1], [sig_y, sig_y], "k")
-        ax.hlines(0, -0.5, 1.5, "gray", "--")
-        ax.set_ylabel("Hyperplane Contrast (a.u.)")
 
-        
-        plt.tight_layout()
+        if significance_between:
+            ax.plot([0, 1], [sig_y, sig_y], "k")
 
-        if p > 0.05:
-            stars = "n.s."
-        elif p > 0.01:
-            stars = "*"
-        elif p > 0.001:
-            stars = "**"
-        else:
-            stars = "***"
-        ax.set_title(title)
-        ax.text(
-            0.5, sig_y + 0.05, f'{stars}\nBF10 = {stats["BF10"].values[0]}', ha="center"
-        )
-        print(stats)
+            if p > 0.05:
+                stars = "n.s."
+            elif p > 0.01:
+                stars = "*"
+            elif p > 0.001:
+                stars = "**"
+            else:
+                stars = "***"
+            ax.set_title(title)
+            ax.text(
+                0.5, sig_y + 0.05, f'{stars}\nBF10 = {stats["BF10"].values[0]}', ha="center"
+            )
+            print(stats)
