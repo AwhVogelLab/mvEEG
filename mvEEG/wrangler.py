@@ -304,8 +304,35 @@ class Wrangler:
         """
         map_dict = {self.condition_dict[k]: v for k, v in self.group_dict.items()}
         return np.vectorize(map_dict.get)(ydata)
+    
+    @staticmethod
+    def _move_element(a,b,index,axis=0):
+        """
+        moves an element from one numpy array to another along the specified dimension
+        """
+        b = np.append(b,a[index],axis=axis)
+        a = np.delete(a,index,axis=axis)
+        return a,b
 
-    def bin_and_split(self, xdata, ydata,test_size=0.2):
+    def _equalize_and_move_conditions(self, x_train, x_test, y_train, y_test):
+        """
+        moves extra training trials to testing set
+        """
+
+        train_labels,train_counts = np.unique(y_train,return_counts=True)
+        num_to_move = train_counts - train_counts.min()
+        for val,n_move in zip(train_labels,num_to_move):
+            if val in y_test:
+
+                move_ixs = np.random.choice(np.where(y_test == val)[0],n_move,replace=False)
+
+                x_train,x_test = self._move_element(x_train,x_test,move_ixs)
+                y_train,y_test = self._move_element(y_train,y_test,move_ixs)
+
+        return x_train, x_test, y_train, y_test
+
+
+    def bin_and_split(self, xdata, ydata,test_size=0.2,equalize_train=True,equalize_test=True):
         """
         generator to handle trial binning and splitting into training and testing sets
         """
@@ -321,8 +348,10 @@ class Wrangler:
                 x_train,y_train = self._select_labels(x_train,y_train,self.training_conditions,code_dict=self.group_dict)
                 x_test,y_test = self._select_labels(x_test,y_test,self.testing_conditions,code_dict=self.group_dict)
 
-            # equalize conditions one more time to avoid imabalances
-            x_train,y_train = self._equalize_conditions(x_train,y_train)
-            x_test,y_test = self._equalize_conditions(x_test,y_test)
+            if equalize_train:
+                x_train,x_test,y_train,y_test = self._equalize_and_move_conditions(x_train,x_test,y_train,y_test)
+
+            if equalize_test:
+                x_test,y_test = self._equalize_conditions(x_test,y_test)
 
             yield x_train, x_test, y_train, y_test
