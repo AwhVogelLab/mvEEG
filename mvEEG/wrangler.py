@@ -25,8 +25,8 @@ class Wrangler:
         self,
         data_dir,
         experiment_name,
-        included_subs: list = [],
-        dropped_subs: list = [],
+        included_subs: list | None = None,
+        dropped_subs: list | None = None,
         dropped_chans: dict = dropped_chans_default,
         trim_timepoints=None,
         t_win: int = 50,
@@ -52,7 +52,8 @@ class Wrangler:
 
         self.rng = np.random.default_rng(RANDOM_SEED)
 
-        if len(included_subs) == 0:  # default to all subs
+        if included_subs is not None:  # default to all subs
+            dropped_subs = [] if dropped_subs is None else dropped_subs
             self.subs = mne_bids.get_entity_vals(
                 self.bids_path.root, "subject", ignore_subjects=dropped_subs
             )
