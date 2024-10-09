@@ -174,12 +174,14 @@ class Wrangler:
             )
 
         if reject:  # drop artifact marked trials
-            artifacts = np.load(
+            if not hasattr(self, 'artifacts'):
+                self.artifacts = {}
+            self.artifacts[isub] = np.load(
                 sub_path.update(suffix="rejection_flags", extension=".npy").fpath
             )
 
-            epochs.drop(artifacts)
-            events = events[~artifacts]
+            epochs.drop(self.artifacts[isub])
+            events = events[~self.artifacts[isub]]
 
         xdata = epochs.get_data()
 
