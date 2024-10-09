@@ -29,7 +29,6 @@ class Wrangler:
         dropped_subs: list = [],
         dropped_chans: dict = dropped_chans_default,
         trim_timepoints=None,
-        sfreq: int = 1000,
         t_win: int = 50,
         t_step: int = 25,
         trial_bin_size: int = 20,
@@ -64,7 +63,6 @@ class Wrangler:
                                  f"subjects: {[sub for sub in dropped_subs if sub in included_subs]}")
 
         self.nsub = len(self.subs)
-        self.sfreq = sfreq
         self.trim_timepoints = trim_timepoints
         self.t_win = t_win
         self.t_step = t_step
@@ -168,15 +166,6 @@ class Wrangler:
         chans_to_drop = [chan for chan in chans_to_drop if chan in epochs.ch_names]
         epochs.drop_channels(chans_to_drop)
 
-        if self.sfreq != epochs.info["sfreq"]:  # resample if high sampling frequency
-            assert (
-                epochs.info["sfreq"] % self.sfreq == 0
-            ), "Cannot resample to desired frequency"
-
-            assert (
-                epochs.info["sfreq"] > self.sfreq
-            ), "Cannot upsample"
-            epochs = epochs.decimate(epochs.info["sfreq"] / self.sfreq)
             
 
         if self.trim_timepoints is not None:  # crop trial duration
