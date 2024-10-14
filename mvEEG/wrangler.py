@@ -386,6 +386,9 @@ class Wrangler:
             xdata: np.ndarray, shape (n_trials,n_chans,n_timepoints)
             ydata: np.ndarray, shape (n_trials,)
             test_size: float (default 0.2), proportion of data to use for testing
+            equalize_train: bool (default True), whether to equalize the number of trials across conditions
+                in the training set by moving extra trials to the test set
+            equalize_test: bool (default True), whether to equalize the number of testing trials across conditions by deleting extras
         
         Returns:
             x_train: np.ndarray, shape (n_train,n_chans,n_timepoints) -  EEG training data
