@@ -19,6 +19,54 @@ import pingouin as pg
 
 
 class Interpreter:
+    """
+    A class to interpret and visualize EEG data for classification experiments.
+
+    Arguments:
+    ----------
+    labels : list
+        A list of labels corresponding to each value in the classification dataset
+    data_dir: str
+        The root directory of the dataset
+    experiment_name: str
+        the name of the experiment
+    descriptions: list
+        A list of descriptions (individual runs) to preload. Any descriptions not specified can still be lazy loaded when called
+    subs: list
+        A list of subjects to load. If not specified, will load all subjects with non-nan values
+
+
+    Attributes:
+    -----------
+    labels : list
+        A list of labels corresponding to each value in the classification dataset
+    dataset : DataLoader
+        An instance of DataLoader to load and manage the dataset. Initialized by the class
+    colors : list
+        A list of colors for plotting.
+
+    Methods:
+    --------
+    get_plot_line():
+        Takes in a 2D array of shape [subjects, time points] and returns mean, and upper/lower SEM lines.
+    plot_stim_bar(ax, stim_time, ylim, hide=False):
+        Plots a stimulus bar on the given axis and returns the aggregate stimulus time.
+    do_significance_testing(t, a, b=0, test=None, alternative="two-sided", correction_method="fdr_bh"):
+        Runs significance testing at each time point and determines the appropriate test.
+    plot_acc(dset=None, ax=None, significance_testing=False, stim_time=[0, 200], save=False, title=None, ylim=[0, 1], chance_text_y=0.2, chance=0.5, skip_aesthetics=False, color="tab:red", sig_y=None, label=None):
+        Plots accuracy for one subject for one condition.
+    plot_hyperplane(labels, dset=None, ax=None, stim_time=[0, 200], title=None, ylim=[-4, 4], legend_title="Trial condition", legend_pos="lower right", label_text_x=-105, label_text_ys=[-3.4, 2.8], stim_label_xy=[100, 3.5], arrow_ys=[-1.1, 1.2], arrow_labels=None, significance_testing=False, sig_pairs=[(0, 1)], sig_ys=[0.2], alternatives=["greater"], sig_colors=["C0"]):
+        Plots the hyperplane for the given labels and dataset.
+    plot_hyperplane_contrast(dset=None, ax=None, pair=None, significance_testing=False, stim_time=[0, 200], title=None, ylim=[-1, 5], skip_aesthetics=False, color="tab:red", sig_y=None, label=None):
+        Plots the hyperplane contrast for the given dataset and pair.
+    plot_confusion_matrix(labels=None, dset=None, ax=None, earliest_t=200, lower=0, upper=1, chance=None, color_map=plt.cm.RdGy_r, title=""):
+        Plots the confusion matrix for the classifier.
+    plot_2_contrasts(dsets, pairs, labels, colors=["C0", "C1"], ax=None, significance_between=False, sig_y_between=3, sig_color="C2", test_tail="two-sided", sig_ys=[-0.5, -0.6], **kwargs):
+        Plots two hyperplane contrast graphs on the axis for comparison.
+    plot_2_contrasts_bar(dsets, pairs, labels, t_start=200, ax=None, significance_between=False, sig_y=1, test_tail="two-sided", ylim=None, title=None, **kwargs):
+        Plots two hyperplane contrasts as a bar graph and computes the Bayes factor between the two.
+    """
+    
     def __init__(
         self,
         labels: list,
@@ -50,14 +98,17 @@ class Interpreter:
 
     @staticmethod
     def plot_stim_bar(ax, stim_time, ylim, hide=False):
+
         """
         plots stim bar and does type checking.
         Also returns an aggregate stim_time of the whole stim period
-        Arguments:
-        ax: axis to plot into
-        stim_time: iterable of 2 ints (for a single stim bar), OR iterable of iterables of 2 ints (multiple bars)
-        ylim: y limits of figure
-        hide (bool): set to true to not actually plot the bar but return an aggregate
+        Args:
+            ax (matplotlib.axes.Axes): Axis to plot into.
+            stim_time (iterable): Iterable of 2 ints (for a single stim bar), or 
+                                  iterable of iterables of 2 ints (for multiple bars).
+            ylim (tuple): Y-axis limits of the figure.
+            hide (bool, optional): Set to True to not actually plot the bar but return 
+                                   a stim time. Defaults to False.
         """
 
         stim_lower = ylim[0] + 0.01
@@ -95,18 +146,20 @@ class Interpreter:
         t, a, b=0, test=None, alternative="two-sided", correction_method="fdr_bh"
     ):
         """
-        Helper function that runs significance testing at each timepoint and determines the appropriate test
-
-        Arguments:
-        t: 1D array of time points
-        a: 2D array of shape [subjects,time points]
-        b: 2D array of shape [subjects,time points] or scalar (for 1 sample test)
-        test: test to run, defaults to ttest_rel if b is 2D, ttest_1samp if b is scalar
-        alternative: 'two-sided' or 'greater' or 'less'
-        correction_method: method to correct for multiple comparisons, defaults to 'fdr_bh'
-
-
+        Perform significance testing on the provided data.
+        Parameters:
+        t (array-like): Time points corresponding to the data.
+        a (array-like): Data array to test.
+        b (array-like, optional): Baseline or comparison data. Default is 0.
+        test (callable, optional): Statistical test function to use. Default is None.
+        alternative (str, optional): Defines the alternative hypothesis. Options are "two-sided", "less", or "greater". Default is "two-sided".
+        correction_method (str, optional): Method for multiple testing correction. Default is "fdr_bh".
+        Returns:
+        A tuple containing:
+            - p (array-like): p-values after testing and correction.
+            - sig05 (array-like): Boolean array indicating significance at the 0.05 level.
         """
+
 
         if test is None:
             if type(b) == int or type(b) == float:
@@ -230,6 +283,7 @@ class Interpreter:
         return ax
 
     def plot_hyperplane(
+
         self,
         labels,
         dset=None,
@@ -250,6 +304,49 @@ class Interpreter:
         alternatives=["greater"],
         sig_colors=["C0"],
     ):
+
+        """
+        Plots the hyperplane for the given dataset and labels.
+        Parameters:
+        -----------
+        labels : list
+            List of condition labels to plot.
+        dset : str, optional
+            Dataset identifier to retrieve data from. Default is None.
+        ax : matplotlib.axes.Axes, optional
+            Axes object to plot on. If None, a new figure and axes are created. Default is None.
+        stim_time : list, optional
+            Time range for the stimulus bar. Default is [0, 200].
+        title : str, optional
+            Title of the plot. Default is None.
+        ylim : list, optional
+            Y-axis limits for the plot. Default is [-4, 4].
+        legend_title : str, optional
+            Title for the legend. Default is "Trial condition".
+        legend_pos : str, optional
+            Position of the legend. Default is "lower right".
+        label_text_x : int, optional
+            X-coordinate for the label text. Default is -105.
+        label_text_ys : list, optional
+            Y-coordinates for the label text. Default is [-3.4, 2.8].
+        stim_label_xy : list, optional
+            Coordinates for the stimulus label. Default is [100, 3.5].
+        arrow_ys : list, optional
+            Y-coordinates for the arrows. Default is [-1.1, 1.2].
+        arrow_labels : list, optional
+            Labels for the arrows. If None, defaults to the first two labels. Default is None.
+        significance_testing : bool, optional
+            Whether to perform significance testing. Default is False.
+        sig_pairs : list, optional
+            Pairs of conditions to test for significance. Default is [(0, 1)].
+        sig_ys : list, optional
+            Y-coordinates for significance markers. Default is [0.2].
+        alternatives : list, optional
+            List of alternative hypotheses for significance testing. Default is ["greater"].
+        sig_colors : list, optional
+            Colors for significance markers. Default is ["C0"].
+
+        """
 
         confidence_scores, t = self.dataset.get_data(dset, keys=["confidenceScores", "times"])
 
