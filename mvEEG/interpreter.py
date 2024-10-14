@@ -211,7 +211,7 @@ class Interpreter:
             plt.setp(ax.get_yticklabels(), fontsize=14)
             plt.xlim(min(t), max(t))
             plt.ylim(ylim)
-            ax.legend(loc="lower right", frameon=False, fontsize=11)
+            # ax.legend(loc="lower right", frameon=False, fontsize=11)
 
             # labelling
             ax.set_xlabel("Time from stimulus onset (ms)", fontsize=14)

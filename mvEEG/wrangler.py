@@ -53,10 +53,10 @@ class Wrangler:
         self,
         data_dir,
         experiment_name,
-        dropped_subs: list = [],
+        included_subs: list | None = None,
+        dropped_subs: list | None = None,
         dropped_chans: dict = dropped_chans_default,
         trim_timepoints=None,
-        sfreq: int = 1000,
         t_win: int = 50,
         t_step: int = 25,
         trial_bin_size: int = 20,
@@ -80,9 +80,18 @@ class Wrangler:
 
         self.rng = np.random.default_rng(RANDOM_SEED)
 
-        self.subs = mne_bids.get_entity_vals(self.bids_path.root, "subject", ignore_subjects=dropped_subs)
+        if included_subs is not None:  # default to all subs
+            dropped_subs = [] if dropped_subs is None else dropped_subs
+            self.subs = mne_bids.get_entity_vals(
+                self.bids_path.root, "subject", ignore_subjects=dropped_subs
+            )
+        else:
+            self.subs = included_subs
+            if any([sub in included_subs for sub in dropped_subs]):
+                raise ValueError("Included and dropped subjects overlap"+
+                                 f"subjects: {[sub for sub in dropped_subs if sub in included_subs]}")
+
         self.nsub = len(self.subs)
-        self.sfreq = sfreq
         self.trim_timepoints = trim_timepoints
         self.t_win = t_win
         self.t_step = t_step
@@ -133,8 +142,9 @@ class Wrangler:
         if testing_groups is None:
             testing_groups = training_groups
 
-        training_groups = [cond.split("/") if "/" in cond else cond for cond in training_groups]  # split into subgroups
-        testing_groups = [cond.split("/") if "/" in cond else cond for cond in testing_groups]
+        training_groups = [cond.split("/") if "/" in cond else [cond] for cond in training_groups] # split into subgroups
+        testing_groups = [cond.split("/") if "/" in cond else [cond] for cond in testing_groups]
+
 
         self.training_conditions = []
         self.testing_conditions = []
@@ -196,17 +206,6 @@ class Wrangler:
         chans_to_drop = [chan for chan in chans_to_drop if chan in epochs.ch_names]
         epochs.drop_channels(chans_to_drop)
 
-        if self.sfreq != epochs.info["sfreq"]:  # check if resampling options are valid. 
-            if epochs.info["sfreq"] % self.sfreq != 0:
-                raise ValueError("Cannot resample EEG data to target frequency (not an integer multiple)." + 
-                                 f"Data sampling rate is {epochs.info['sfreq']} Hz" + 
-                                 f"but the requested sampling rate is {self.sfreq} Hz.")
-            if epochs.info["sfreq"] < self.sfreq:
-                raise ValueError("Cannot upsample EEG data." +
-                                 f"Data sampling rate is {epochs.info['sfreq']} Hz" + 
-                                 f"but the requested sampling rate is {self.sfreq} Hz.")
-
-            epochs = epochs.decimate(self.sfreq / epochs.info["sfreq"]) # resample by decimating
 
         if self.trim_timepoints is not None:  # crop trial duration
             epochs.crop(
@@ -351,8 +350,35 @@ class Wrangler:
 
         map_dict = {og_dict[k]: v for k, v in new_dict.items()}
         return np.vectorize(map_dict.get)(ydata)
+    
+    @staticmethod
+    def _move_element(a,b,index,axis=0):
+        """
+        moves an element from one numpy array to another along the specified dimension
+        """
+        b = np.append(b,a[index],axis=axis)
+        a = np.delete(a,index,axis=axis)
+        return a,b
 
-    def bin_and_split(self, xdata, ydata, test_size=0.2):
+    def _equalize_and_move_conditions(self, x_train, x_test, y_train, y_test):
+        """
+        moves extra training trials to testing set
+        """
+
+        train_labels,train_counts = np.unique(y_train,return_counts=True)
+        num_to_move = train_counts - train_counts.min()
+        for val,n_move in zip(train_labels,num_to_move):
+            if val in y_test:
+
+                move_ixs = np.random.choice(np.where(y_test == val)[0],n_move,replace=False)
+
+                x_train,x_test = self._move_element(x_train,x_test,move_ixs)
+                y_train,y_test = self._move_element(y_train,y_test,move_ixs)
+
+        return x_train, x_test, y_train, y_test
+
+
+    def bin_and_split(self, xdata, ydata,test_size=0.2,equalize_train=True,equalize_test=True):
         """
         generator to handle trial binning and splitting into training and testing sets.
 
@@ -386,5 +412,10 @@ class Wrangler:
                     x_train, y_train, self.training_conditions, code_dict=self.group_dict
                 )
                 x_test, y_test = self._select_labels(x_test, y_test, self.testing_conditions, code_dict=self.group_dict)
+            if equalize_train:
+                x_train,x_test,y_train,y_test = self._equalize_and_move_conditions(x_train,x_test,y_train,y_test)
+
+            if equalize_test:
+                x_test,y_test = self._equalize_conditions(x_test,y_test)
 
             yield x_train, x_test, y_train, y_test
