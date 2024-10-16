@@ -176,8 +176,6 @@ class Interpreter:
 
         return p, sig05
 
-
-
     def plot_acc(
         self,
         dset=None,
@@ -281,6 +279,114 @@ class Interpreter:
             if title is not None:
                 ax.set_title(title, fontsize=18)
         return ax
+    
+    def plot_acc_indiv(
+        self,
+        dset=None,
+        subplot_shape=None,
+        significance_testing=False,
+        stim_time=[0, 200],
+        save=False,
+        title=None,
+        ylim=[0, 1],
+        chance_text_y=0.2,
+        chance=0.5,
+        skip_aesthetics=False,
+        color="tab:red",
+        sig_y=None,
+        label=None,
+    ):
+        """
+        Plots accuracy for one subject for one condition
+        Arguments:
+        dset (str): description of the condition to plot (can leave blank if only one condition)
+        ax (matplotlib axis): axis to plot into (creates if doesn't exist)
+        significance_testing (bool): run significance testing and plot significance dots
+        stim_time (list of 2 times, or list of stim_times): time of stimulus presentation
+        save (bool): whether to save figure
+        title (str): title of figure
+        ylim (list of 2 floats): y limits of figure
+        chance_text_y (float): y position of chance label
+        chance (float): chance level for plot (defaults to 0.5)
+        skip_aesthetics (bool): set to True to skip aesthetic features and only plot the line
+        color (str): color of line
+        sig_y (float): y position of significance dots
+        label (str): label of line
+        """
+
+        # extract values and average over iterations
+
+        acc, acc_shuff, t = self.dataset.get_data(
+            dset, keys=["accuracy", "shuffledAccuracy", "times"]
+        )
+
+        if subplot_shape is None:
+            subplot_shape = (1, acc.shape[0])
+
+        fig, axes = plt.subplots(subplot_shape[0], subplot_shape[1], figsize=(15, 5))
+
+        for i in range(acc.shape[0]):
+            acc_sub = acc[i]
+            acc_shuff_sub = acc_shuff[i]
+
+            ax = axes[i] if acc.shape[0] > 1 else axes
+
+            acc_mean, acc_upper, acc_lower = self.get_plot_line(acc_sub)
+            acc_shuff_mean, acc_shuff_upper, acc_shuff_lower = self.get_plot_line(acc_shuff_sub)
+
+            sig_y = chance - 0.05 if sig_y is None else sig_y
+
+            ax.plot(t, acc_mean, color=color, label=label, linewidth=2)
+            ax.fill_between(t, acc_upper, acc_lower, color=color, alpha=0.5)
+
+            ax.plot(t, acc_shuff_mean, color="gray")
+            ax.fill_between(t, acc_shuff_upper, acc_shuff_lower, color="gray", alpha=0.5)
+
+            if significance_testing:
+                p, sig05 = self.do_significance_testing(
+                    t, acc_sub, acc_shuff_sub, alternative="greater"
+                )
+                ax.scatter(
+                    t[t > 0][sig05],
+                    np.full(sum(sig05), sig_y),
+                    color=color,
+                    s=10,
+                    marker="s",
+                    zorder=999,
+                )
+                print(
+                    f"% timepoints significant: {round(sum(sig05)/len(sig05)*100,2)} ({sum(sig05)}/{len(sig05)})%"
+                )
+
+            if not skip_aesthetics:
+                stim_time = self.plot_stim_bar(ax, stim_time, ylim)
+                ax.plot(t, np.ones((len(t))) * chance, "--", color="gray", zorder=0)
+                # aesthetics
+                ax.spines["right"].set_visible(False)
+                ax.spines["top"].set_visible(False)
+                ax.yaxis.set_ticks_position("left")
+                ax.xaxis.set_ticks_position("bottom")
+                ax.yaxis.set_ticks(np.arange(0.1, 1.1, 0.1))
+                plt.setp(ax.get_xticklabels(), fontsize=14)
+                plt.setp(ax.get_yticklabels(), fontsize=14)
+                plt.xlim(min(t), max(t))
+                plt.ylim(ylim)
+                # ax.legend(loc="lower right", frameon=False, fontsize=11)
+
+                # labelling
+                ax.set_xlabel("Time from stimulus onset (ms)")
+                ax.set_ylabel("Classification accuracy", fontsize=14)
+                ax.text(
+                    0.17,
+                    0.9,
+                    "Stim",
+                    transform=ax.transAxes,
+                    fontsize=16,
+                    verticalalignment="top",
+                    color="black",
+                )
+                ax.set_title(f"Sub {i}", fontsize=18)
+        return fig
 
     def plot_hyperplane(
 
