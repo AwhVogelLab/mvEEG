@@ -78,8 +78,8 @@ class Wrangler:
 
         self.rng = np.random.default_rng(RANDOM_SEED)
 
-        if included_subs is not None:  # default to all subs
-            dropped_subs = [] if dropped_subs is None else dropped_subs
+        dropped_subs = [] if dropped_subs is None else dropped_subs
+        if included_subs is None:  # default to all subs
             self.subs = mne_bids.get_entity_vals(self.bids_path.root, "subject", ignore_subjects=dropped_subs)
         else:
             self.subs = included_subs
