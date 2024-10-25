@@ -1,15 +1,15 @@
 import numpy as np
 from pathlib import Path
 import mne_bids
-import os
-import re
 from collections import defaultdict
+
 
 class CallableDefaultDict(dict):
     """
     A dict subclass that will dynamically generate a default value for a key if it is missing
     Like defaultdict, but the default value is based on the key
     """
+
     def __init__(self, default_factory, *args, **kwargs):
         self.default_factory = default_factory
         super().__init__(*args, **kwargs)
@@ -40,11 +40,14 @@ class DataLoader:
         root_dir: str,
         data_type: str,
         experiment_name: str,
-        descriptions: list = [],
-        subs: list = [],
+        descriptions: list | None = None,
+        subs: list | None = None,
     ):
 
         self.root_dir = root_dir
+
+        descriptions = [] if descriptions is None else descriptions
+        subs = [] if subs is None else subs
 
         if len(subs) == 0:  # default to all subs
             subs = [str(s.name).strip("sub-") for s in Path(root_dir).glob("sub-*")]
@@ -63,9 +66,8 @@ class DataLoader:
 
         self.descriptions = descriptions
 
-
         preloaded_descs = {desc: self.load_description(desc) for desc in self.descriptions}
-        self._data_dict = CallableDefaultDict(self.load_description,preloaded_descs)
+        self._data_dict = CallableDefaultDict(self.load_description, preloaded_descs)
 
     def load_description(self, description: str):
         """
@@ -93,37 +95,24 @@ class DataLoader:
             if (len(shape) > 1) and (len(loaded_data[dset]) > 1):
 
                 raise RuntimeError(f"Data files have inconsistent shapes: {shape}")
-            loaded_data[dset] = np.stack([
-                dat if dat is not None else np.full(shape.flatten(), np.nan) for dat in loaded_data[dset]
-            ]) # concatenate over subject dimension
+            loaded_data[dset] = np.stack(
+                [dat if dat is not None else np.full(shape.flatten(), np.nan) for dat in loaded_data[dset]]
+            )  # concatenate over subject dimension
 
-        if "times" in loaded_data.keys(): # do we want this to be required? Could raise an error if not
+        if "times" in loaded_data.keys():  # do we want this to be required? Could raise an error if not
 
             # check that our timing aligns
-            if (
-                len(
-                    np.unique(
-                        loaded_data["times"][
-                            np.isfinite(loaded_data["times"]).all(axis=1)
-                        ],
-                        axis=0)
-                )
-                > 1
-            ):
+            if len(np.unique(loaded_data["times"][np.isfinite(loaded_data["times"]).all(axis=1)], axis=0)) > 1:
                 raise ValueError("Time indices are not consistent across subjects")
-            
-            loaded_data["times"] = loaded_data["times"][0] # only need one copy of times
 
-        if description not in self.descriptions: # add on to descriptions
+            loaded_data["times"] = loaded_data["times"][0]  # only need one copy of times
+
+        if description not in self.descriptions:  # add on to descriptions
             self.descriptions.append(description)
 
-        
-        return dict(loaded_data) # return as a non-defaultdict
+        return dict(loaded_data)  # return as a non-defaultdict
 
-
-    def get_data(self,
-                 dset: str | None = None,
-                 keys: list | str = []):
+    def get_data(self, dset: str | None = None, keys: list | str = []):
         """
         Helper function that returns data from the internal dataset dictionary
 
@@ -139,10 +128,10 @@ class DataLoader:
                 dset = self.descriptions[0]
 
         if len(keys) == 0:
-            keys = self._data_dict[dset].keys() # default to all
+            keys = self._data_dict[dset].keys()  # default to all
 
         if type(keys) is str:
-            keys = [keys] # if only 1 key
+            keys = [keys]  # if only 1 key
 
         data_to_return = []
         for key in keys:
@@ -153,7 +142,6 @@ class DataLoader:
                 result = result[np.isfinite(result).reshape(result.shape[0], -1).all(axis=1)]
                 # remove subs with nans
                 data_to_return.append(result)
-
 
         if len(np.unique([result.shape[0] for result in data_to_return if len(result.shape) > 1])) > 1:
             raise ValueError("Data files have inconsistent numbers of valid subjects")

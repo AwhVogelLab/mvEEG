@@ -49,15 +49,15 @@ class Interpreter:
     --------
     get_plot_line():
         Takes in a 2D array of shape [subjects, time points] and returns mean, and upper/lower SEM lines.
-    plot_stim_bar(ax, stim_time, ylim, hide=False):
-        Plots a stimulus bar on the given axis and returns the aggregate stimulus time.
+    plot_single_phase(ax, phase_time, ylim, hide=False):
+        Plots a shaded region on the given axis and returns the aggregate stimulus time.
     do_significance_testing(t, a, b=0, test=None, alternative="two-sided", correction_method="fdr_bh"):
         Runs significance testing at each time point and determines the appropriate test.
-    plot_acc(dset=None, ax=None, significance_testing=False, stim_time=[0, 200], save=False, title=None, ylim=[0, 1], chance_text_y=0.2, chance=0.5, skip_aesthetics=False, color="tab:red", sig_y=None, label=None):
+    plot_acc(dset=None, ax=None, significance_testing=False, phase_times=None, save=False, title=None, ylim=[0, 1], chance_text_y=0.2, chance=0.5, skip_aesthetics=False, color="tab:red", sig_y=None, label=None):
         Plots accuracy for one subject for one condition.
-    plot_hyperplane(labels, dset=None, ax=None, stim_time=[0, 200], title=None, ylim=[-4, 4], legend_title="Trial condition", legend_pos="lower right", label_text_x=-105, label_text_ys=[-3.4, 2.8], stim_label_xy=[100, 3.5], arrow_ys=[-1.1, 1.2], arrow_labels=None, significance_testing=False, sig_pairs=[(0, 1)], sig_ys=[0.2], alternatives=["greater"], sig_colors=["C0"]):
+    plot_hyperplane(labels, dset=None, ax=None, phase_times=None, title=None, ylim=[-4, 4], legend_title="Trial condition", legend_pos="lower right", label_text_x=-105, label_text_ys=[-3.4, 2.8], stim_label_xy=[100, 3.5], arrow_ys=[-1.1, 1.2], arrow_labels=None, significance_testing=False, sig_pairs=[(0, 1)], sig_ys=[0.2], alternatives=["greater"], sig_colors=["C0"]):
         Plots the hyperplane for the given labels and dataset.
-    plot_hyperplane_contrast(dset=None, ax=None, pair=None, significance_testing=False, stim_time=[0, 200], title=None, ylim=[-1, 5], skip_aesthetics=False, color="tab:red", sig_y=None, label=None):
+    plot_hyperplane_contrast(dset=None, ax=None, pair=None, significance_testing=False, phase_times=None, title=None, ylim=[-1, 5], skip_aesthetics=False, color="tab:red", sig_y=None, label=None):
         Plots the hyperplane contrast for the given dataset and pair.
     plot_confusion_matrix(labels=None, dset=None, ax=None, earliest_t=200, lower=0, upper=1, chance=None, color_map=plt.cm.RdGy_r, title=""):
         Plots the confusion matrix for the classifier.
@@ -72,8 +72,9 @@ class Interpreter:
         labels: list,
         data_dir: str,
         experiment_name: str,
-        descriptions: list = [],
-        subs: list = [],
+        descriptions: list | None = None,
+        subs: list | None = None,
+        trial_phases: dict | None = None,
     ):
         
         self.dataset = DataLoader(root_dir=data_dir,
@@ -84,6 +85,7 @@ class Interpreter:
         
         self.labels = labels
         self.colors = ["royalblue", "firebrick", "forestgreen", "orange", "purple"]
+        self.trial_phases = trial_phases
 
     @staticmethod
     def get_plot_line(a):
@@ -97,48 +99,69 @@ class Interpreter:
         return mean, upper, lower
 
     @staticmethod
-    def plot_stim_bar(ax, stim_time, ylim, hide=False):
+    def plot_single_phase(ax, phase_time, ylim, hide=False, color="gray", title=None, fontsize=16):
 
         """
         plots stim bar and does type checking.
-        Also returns an aggregate stim_time of the whole stim period
         Args:
             ax (matplotlib.axes.Axes): Axis to plot into.
-            stim_time (iterable): Iterable of 2 ints (for a single stim bar), or 
-                                  iterable of iterables of 2 ints (for multiple bars).
+            phase_time (iterable): Iterable of 2 ints.
             ylim (tuple): Y-axis limits of the figure.
             hide (bool, optional): Set to True to not actually plot the bar but return 
                                    a stim time. Defaults to False.
         """
+        if hide:
+            return
+        
+        assert len(ylim) == 2, "ylim should be a list of 2 floats"
+        assert len(phase_time) == 2, "phase_time should be a list or tuple of 2 numbers"
 
-        stim_lower = ylim[0] + 0.01
-        stim_upper = ylim[1]
-        if type(stim_time[0]) is int:
-            if not hide:
-                ax.fill_between(
-                    stim_time,
-                    [stim_lower, stim_lower],
-                    [stim_upper, stim_upper],
-                    color="gray",
-                    alpha=0.5,
-                    zorder=-999,
-                )
-            return stim_time
-        elif type(stim_time[0]) is list or type(stim_time[0]) is tuple:
-            for time in stim_time:
-                if not hide:
-                    ax.fill_between(
-                        time,
-                        [stim_lower, stim_lower],
-                        [stim_upper, stim_upper],
-                        color="gray",
-                        alpha=0.5,
-                        zorder=-999,
-                    )
-            return [stim_time[0][0], stim_time[-1][1]]
+        phase_lower = ylim[0]
+        phase_upper = ylim[1]
+
+        ax.fill_between(
+            phase_time,
+            [phase_lower, phase_lower],
+            [phase_upper, phase_upper],
+            color=color,
+            alpha=0.5,
+            zorder=-999,
+        )
+        if title is not None:
+            ax.text(
+                np.mean(phase_time),
+                phase_upper*.95 + phase_lower * 0.05,
+                title,
+                fontsize=16,
+                verticalalignment="top",
+                horizontalalignment="center",
+                color="black",
+            )
+
+    def plot_trial_phases(self, ax, trial_phases, ylim, hide=False):
+        """
+        Plots bars for multiple phases.
+        Args:
+            ax (matplotlib.axes.Axes): Axis to plot into.
+            trial_phases (dict): Dictionary of trial phases.
+            ylim (tuple): Y-axis limits of the figure.
+            hide (bool, optional): Set to True to not actually plot the bar but return 
+                                   a stim time. Defaults to False.
+        """
+        if hide:
+            return
+
+        assert len(ylim) == 2, "ylim should be a list of 2 floats"
+
+        if type(trial_phases) is dict:
+            for phase, time in trial_phases.items():
+                self.plot_single_phase(ax, time, ylim, hide=hide, title=phase)
+        elif type(trial_phases) in [list, tuple] and type(trial_phases[0]) in [list, tuple]:
+            for phase_time in trial_phases:
+                self.plot_single_phase(ax, phase_time, ylim, hide=hide)
         else:
             raise TypeError(
-                "stim_time should either be an iterable of lists or tuples, or a single iterable of ints"
+                "trial_phases should either be a dictionary, or an iterable of lists or tuples. If adding a single phase, use  plot_single_phase."
             )
 
     @staticmethod
@@ -181,7 +204,6 @@ class Interpreter:
         dset=None,
         ax=None,
         significance_testing=False,
-        stim_time=[0, 200],
         save=False,
         title=None,
         ylim=[0, 1],
@@ -191,6 +213,7 @@ class Interpreter:
         color="tab:red",
         sig_y=None,
         label=None,
+        trial_phases=None
     ):
         """
         Plots accuracy for one subject for one condition
@@ -198,7 +221,7 @@ class Interpreter:
         dset (str): description of the condition to plot (can leave blank if only one condition)
         ax (matplotlib axis): axis to plot into (creates if doesn't exist)
         significance_testing (bool): run significance testing and plot significance dots
-        stim_time (list of 2 times, or list of stim_times): time of stimulus presentation
+        phase_times: dictionary or list of lists of phase times
         save (bool): whether to save figure
         title (str): title of figure
         ylim (list of 2 floats): y limits of figure
@@ -250,7 +273,8 @@ class Interpreter:
             )
 
         if not skip_aesthetics:
-            stim_time = self.plot_stim_bar(ax, stim_time, ylim)
+            trial_phases = self.trial_phases if trial_phases is None else trial_phases
+            self.plot_trial_phases(ax, trial_phases, ylim)
             ax.plot(t, np.ones((len(t))) * chance, "--", color="gray", zorder=0)
             # aesthetics
             ax.spines["right"].set_visible(False)
@@ -267,15 +291,7 @@ class Interpreter:
             # labelling
             ax.set_xlabel("Time from stimulus onset (ms)", fontsize=14)
             ax.set_ylabel("Classification accuracy", fontsize=14)
-            ax.text(
-                0.17,
-                0.9,
-                "Stim",
-                transform=ax.transAxes,
-                fontsize=16,
-                verticalalignment="top",
-                color="black",
-            )
+
             if title is not None:
                 ax.set_title(title, fontsize=18)
         return ax
@@ -285,7 +301,6 @@ class Interpreter:
         dset=None,
         subplot_shape=None,
         significance_testing=False,
-        stim_time=[0, 200],
         save=False,
         title=None,
         ylim=[0, 1],
@@ -295,6 +310,7 @@ class Interpreter:
         color="tab:red",
         sig_y=None,
         label=None,
+        trial_phases=None
     ):
         """
         Plots accuracy for one subject for one condition
@@ -302,7 +318,7 @@ class Interpreter:
         dset (str): description of the condition to plot (can leave blank if only one condition)
         ax (matplotlib axis): axis to plot into (creates if doesn't exist)
         significance_testing (bool): run significance testing and plot significance dots
-        stim_time (list of 2 times, or list of stim_times): time of stimulus presentation
+        trial_phases: dictionary or list of lists of 2 items describing when different phases occured
         save (bool): whether to save figure
         title (str): title of figure
         ylim (list of 2 floats): y limits of figure
@@ -359,7 +375,8 @@ class Interpreter:
                 )
 
             if not skip_aesthetics:
-                stim_time = self.plot_stim_bar(ax, stim_time, ylim)
+                trial_phases = self.trial_phases if trial_phases is None else trial_phases
+                self.plot_trial_phases(ax, trial_phases, ylim)
                 ax.plot(t, np.ones((len(t))) * chance, "--", color="gray", zorder=0)
                 # aesthetics
                 ax.spines["right"].set_visible(False)
@@ -376,15 +393,6 @@ class Interpreter:
                 # labelling
                 ax.set_xlabel("Time from stimulus onset (ms)")
                 ax.set_ylabel("Classification accuracy", fontsize=14)
-                ax.text(
-                    0.17,
-                    0.9,
-                    "Stim",
-                    transform=ax.transAxes,
-                    fontsize=16,
-                    verticalalignment="top",
-                    color="black",
-                )
                 ax.set_title(f"Sub {i}", fontsize=18)
         return fig
 
@@ -394,21 +402,21 @@ class Interpreter:
         labels,
         dset=None,
         ax=None,
-        stim_time=[0, 200],
         title=None,
-        ylim=[-4, 4],
+        ylim=(-4, 4),
         legend_title="Trial condition",
         legend_pos="lower right",
         label_text_x=-105,
-        label_text_ys=[-3.4, 2.8],
-        stim_label_xy=[100, 3.5],
-        arrow_ys=[-1.1, 1.2],
+        label_text_ys=(-3.4, 2.8),
+        stim_label_xy=(100, 3.5),
+        arrow_ys=(-1.1, 1.2),
         arrow_labels=None,
         significance_testing=False,
-        sig_pairs=[(0, 1)],
-        sig_ys=[0.2],
+        sig_pairs=((0, 1)),
+        sig_ys=(0.2),
         alternatives=["greater"],
         sig_colors=["C0"],
+        trial_phases=None
     ):
 
         """
@@ -421,8 +429,7 @@ class Interpreter:
             Dataset identifier to retrieve data from. Default is None.
         ax : matplotlib.axes.Axes, optional
             Axes object to plot on. If None, a new figure and axes are created. Default is None.
-        stim_time : list, optional
-            Time range for the stimulus bar. Default is [0, 200].
+        trial_phases: dictionary or list of lists of 2 items describing when different phases occured
         title : str, optional
             Title of the plot. Default is None.
         ylim : list, optional
@@ -461,7 +468,6 @@ class Interpreter:
         if ax is None:
             _, ax = plt.subplots()
 
-        stim_time = self.plot_stim_bar(ax=ax, stim_time=stim_time, ylim=ylim)
         ax.plot(t, np.zeros((len(t))), "--", color="gray")
 
         condition_subset = [self.labels.index(label) for label in labels]
@@ -484,6 +490,9 @@ class Interpreter:
         plt.setp(ax.get_xticklabels(), fontsize=14)
 
         plt.ylim(ylim)
+
+        trial_phases = self.trial_phases if trial_phases is None else trial_phases
+        self.plot_trial_phases(ax, trial_phases, ylim)
 
         if significance_testing:
             sig_pairs = [self._get_pair_from_label(pair) for pair in sig_pairs]
@@ -568,13 +577,13 @@ class Interpreter:
         ax=None,
         pair=None,
         significance_testing=False,
-        stim_time=[0, 200],
         title=None,
         ylim=[-1, 5],
         skip_aesthetics=False,
         color="tab:red",
         sig_y=None,
         label=None,
+        trial_phases=None
     ):
         """
         Plots accuracy for one subject for one condition
@@ -583,7 +592,7 @@ class Interpreter:
         ax (matplotlib axis): axis to plot into (creates if doesn't exist)
         pair: which pair to calculate
         significance_testing (bool): run significance testing and plot significance dots
-        stim_time (list of 2 times, or list of stim_times): time of stimulus presentation
+        trial_phases: dictionary or list of lists of 2 items describing when different phases occured
         save (bool): whether to save figure
         title (str): title of figure
         ylim (list of 2 floats): y limits of figure
@@ -627,7 +636,8 @@ class Interpreter:
             )
 
         if not skip_aesthetics:
-            stim_time = self.plot_stim_bar(ax, stim_time, ylim)
+            trial_phases = self.trial_phases if trial_phases is None else trial_phases
+            self.plot_trial_phases(ax, trial_phases, ylim)
             ax.plot(t, np.zeros((len(t))), "--", color="gray", zorder=0)
             # aesthetics
             ax.spines["right"].set_visible(False)
@@ -644,15 +654,6 @@ class Interpreter:
             # labelling
             ax.set_xlabel("Time from stimulus onset (ms)", fontsize=14)
             ax.set_ylabel("Hyperplane Contrast (a.u.)", fontsize=14)
-            ax.text(
-                0.17,
-                0.9,
-                "Stim",
-                transform=ax.transAxes,
-                fontsize=16,
-                verticalalignment="top",
-                color="black",
-            )
             if title is not None:
                 ax.set_title(title, fontsize=18)
         return ax
