@@ -2,9 +2,7 @@ import numpy as np
 import pandas as pd
 import mne_bids
 import mne
-from pathlib import Path
 from collections import defaultdict
-from contextlib import redirect_stdout
 from sklearn.model_selection import train_test_split
 
 mne.set_log_level("ERROR")
@@ -32,7 +30,7 @@ class Wrangler:
             Default: no EEG channels, ALL other channels (eog, eyegaze, pupil, misc)
         trim_timepoints (tuple): A tuple of the timepoints to trim the data to (start, end) - defaults to none
         sfreq (int), default 1000: The sampling frequency of the data in Hz
-        t_win (int), default 50: The window size to bin trials in ms 
+        t_win (int), default 50: The window size to bin trials in ms
         t_step (int), default 25: window step size
             If t_step < t_win, will be a sliding window
         trial_bin_size (int), default 20: The number of trials to bin together - Set to 1 for no binning
@@ -82,14 +80,11 @@ class Wrangler:
 
         if included_subs is not None:  # default to all subs
             dropped_subs = [] if dropped_subs is None else dropped_subs
-            self.subs = mne_bids.get_entity_vals(
-                self.bids_path.root, "subject", ignore_subjects=dropped_subs
-            )
+            self.subs = mne_bids.get_entity_vals(self.bids_path.root, "subject", ignore_subjects=dropped_subs)
         else:
             self.subs = included_subs
             if any([sub in included_subs for sub in dropped_subs]):
-                raise ValueError("Included and dropped subjects overlap"+
-                                 f"subjects: {[sub for sub in dropped_subs if sub in included_subs]}")
+                raise ValueError("Included and dropped subjects overlap" + f"subjects: {[sub for sub in dropped_subs if sub in included_subs]}")
 
         self.nsub = len(self.subs)
         self.trim_timepoints = trim_timepoints
@@ -100,7 +95,7 @@ class Wrangler:
         self.condition_dict = condition_dict
         self.conditions = conditions
 
-        ### get general info from first subject and populate fields
+        # get general info from first subject and populate fields
 
         sub_path = self.bids_path.copy().update(subject=self.subs[0])
         epochs = mne.read_epochs(sub_path.update(suffix="eeg", extension=".fif").fpath)
@@ -117,15 +112,15 @@ class Wrangler:
         self.chans_to_drop = []
         ch_names = np.array(epochs.ch_names)
         ch_types = np.array(epochs.get_channel_types())
-        for chan_type in self.dropped_chans.keys(): # drop irrelevant channels
+        for chan_type in self.dropped_chans.keys():  # drop irrelevant channels
             if self.dropped_chans[chan_type] == "ALL":
                 self.chans_to_drop.extend(ch_names[ch_types == chan_type])
             else:
                 self.chans_to_drop.extend(self.dropped_chans[chan_type])
 
-        self.ch_names = np.setdiff1d(ch_names, self.chans_to_drop,assume_unique=True)
+        self.ch_names = np.setdiff1d(ch_names, self.chans_to_drop, assume_unique=True)
 
-        ## make a condition dict if it doesn't exist
+        # make a condition dict if it doesn't exist
         if self.condition_dict is None:
             events = pd.read_csv(sub_path.update(suffix="events", extension=".tsv").fpath, sep="\t")
             self.condition_dict = defaultdict(None)
@@ -142,34 +137,28 @@ class Wrangler:
         if testing_groups is None:
             testing_groups = training_groups
 
-        training_groups = [cond.split("/") if "/" in cond else [cond] for cond in training_groups] # split into subgroups
+        training_groups = [cond.split("/") if "/" in cond else [cond] for cond in training_groups]  # split into subgroups
         testing_groups = [cond.split("/") if "/" in cond else [cond] for cond in testing_groups]
-
 
         self.training_conditions = []
         self.testing_conditions = []
 
-
-        ## auto generate a grouping dict based on training and testing conditions.
-        ## This translates EEG condition codes into ordered codes (for regression analyses)
-        ## TODO: make this exposed to the user?
-
-
+        # auto generate a grouping dict based on training and testing conditions.
+        # This translates EEG condition codes into ordered codes (for regression analyses)
+        # TODO: make this exposed to the user?
 
         self.group_dict = defaultdict(None)
 
         for igroup, group in enumerate(training_groups):
             for condition in self.conditions:
-                if all([subgroup in condition.split("/") for subgroup in group]): # check if all subgroups are in condition
-                    self.group_dict[condition] = igroup # assign labels starting at 0
+                if all([subgroup in condition.split("/") for subgroup in group]):  # check if all subgroups are in condition
+                    self.group_dict[condition] = igroup  # assign labels starting at 0
                     self.training_conditions.append(condition)
         for igroup, group in enumerate(testing_groups):
             if group not in training_groups:
                 for condition in self.conditions:
                     if all([subgroup in condition.split("/") for subgroup in group]):
-                        self.group_dict[condition] = (
-                            len(training_groups) + igroup
-                        )  # offset by number of training groups
+                        self.group_dict[condition] = len(training_groups) + igroup  # offset by number of training groups
                         self.testing_conditions.append(condition)
             else:
                 for condition in self.conditions:
@@ -177,7 +166,6 @@ class Wrangler:
                         self.testing_conditions.append(condition)
 
     def load_eeg(self, isub, drop_chans_manual=[], reject=True, time_bin=True):
-
         """
         Function to load in EEG data for a given subject and do basic preprocessing
 
@@ -206,7 +194,6 @@ class Wrangler:
         chans_to_drop = [chan for chan in chans_to_drop if chan in epochs.ch_names]
         epochs.drop_channels(chans_to_drop)
 
-
         if self.trim_timepoints is not None:  # crop trial duration
             epochs.crop(
                 tmin=self.trim_timepoints[0],
@@ -215,25 +202,19 @@ class Wrangler:
             )
 
         if reject:  # drop artifact marked trials
-<<<<<<< HEAD
-            if not hasattr(self, 'artifacts'):
+            if not hasattr(self, "artifacts"):
                 self.artifacts = {}
-            self.artifacts[isub] = np.load(
-                sub_path.update(suffix="rejection_flags", extension=".npy").fpath
-            )
-=======
-            artifacts = np.load(sub_path.update(suffix="rejection_flags", extension=".npy").fpath)
->>>>>>> origin/main
+            self.artifacts[isub] = np.load(sub_path.update(suffix="rejection_flags", extension=".npy").fpath)
 
             epochs.drop(self.artifacts[isub])
             events = events[~self.artifacts[isub]]
 
         xdata = epochs.get_data()
 
-        xdata, events = self._select_labels(xdata, events) # select out labels in conditions
+        xdata, events = self._select_labels(xdata, events)  # select out labels in conditions
         if time_bin:  # average within time bins (disable for ERP analyses)
             xdata_time_binned = np.zeros((xdata.shape[0], xdata.shape[1], len(self.t)))
-            for tidx, t in enumerate(self.t): # average over time dimension
+            for tidx, t in enumerate(self.t):  # average over time dimension
                 timepoints = (self.times >= t - self.t_win // 2) & (self.times <= t + self.t_win // 2)
                 xdata_time_binned[:, :, tidx] = xdata[:, :, timepoints].mean(-1)
             xdata = xdata_time_binned
@@ -302,7 +283,7 @@ class Wrangler:
             ydata: np.ndarray, shape (n_bins,)
         """
 
-        if permute: # shuffle trials if set
+        if permute:  # shuffle trials if set
             perm = self.rng.permutation(xdata.shape[0])
             xdata = xdata[perm]
             ydata = ydata[perm]
@@ -311,7 +292,7 @@ class Wrangler:
 
         min_per_cond = min_per_cond - min_per_cond % self.trial_bin_size  # nearest multiple of trial_bin_size
 
-        xdata, ydata = self._equalize_conditions(xdata, ydata, n_trials_per=min_per_cond) # equalize trials across conditions
+        xdata, ydata = self._equalize_conditions(xdata, ydata, n_trials_per=min_per_cond)  # equalize trials across conditions
 
         if self.trial_bin_size == 1:  # if not binning, just return the trimmed inputs
             return xdata, ydata
@@ -321,8 +302,7 @@ class Wrangler:
         # sort x such that it is grouped by condition
         # this lets us bin by reshaping the data instead of looping over trials
         sortix = np.argsort(ydata)
-        x_sort = xdata[sortix] 
-        
+        x_sort = xdata[sortix]
 
         # next line: reshape x_sort into n_bins bins, each bin containing self.trial_bin_size trials
         # so (trials x channels x timepoints) -> (bins x trials_per_bin x channels x timepoints)
@@ -334,9 +314,9 @@ class Wrangler:
 
         return xdata_binned, ydata_binned
 
-    def _relabel_trials(self, ydata,og_dict = None, new_dict = None):
+    def _relabel_trials(self, ydata, og_dict=None, new_dict=None):
         """
-        
+
         Helper function to relabel trials from one set of codes to another.
         Used to transform event codes to group codes for decoding.
 
@@ -358,35 +338,34 @@ class Wrangler:
 
         map_dict = {og_dict[k]: v for k, v in new_dict.items()}
         return np.vectorize(map_dict.get)(ydata)
-    
+
     @staticmethod
-    def _move_element(a,b,index,axis=0):
+    def _move_element(a, b, index, axis=0):
         """
         moves an element from one numpy array to another along the specified dimension
         """
-        b = np.append(b,a[index],axis=axis)
-        a = np.delete(a,index,axis=axis)
-        return a,b
+        b = np.append(b, a[index], axis=axis)
+        a = np.delete(a, index, axis=axis)
+        return a, b
 
     def _equalize_and_move_conditions(self, x_train, x_test, y_train, y_test):
         """
         moves extra training trials to testing set
         """
 
-        train_labels,train_counts = np.unique(y_train,return_counts=True)
+        train_labels, train_counts = np.unique(y_train, return_counts=True)
         num_to_move = train_counts - train_counts.min()
-        for val,n_move in zip(train_labels,num_to_move):
+        for val, n_move in zip(train_labels, num_to_move):
             if val in y_test:
 
-                move_ixs = np.random.choice(np.where(y_test == val)[0],n_move,replace=False)
+                move_ixs = np.random.choice(np.where(y_test == val)[0], n_move, replace=False)
 
-                x_train,x_test = self._move_element(x_train,x_test,move_ixs)
-                y_train,y_test = self._move_element(y_train,y_test,move_ixs)
+                x_train, x_test = self._move_element(x_train, x_test, move_ixs)
+                y_train, y_test = self._move_element(y_train, y_test, move_ixs)
 
         return x_train, x_test, y_train, y_test
 
-
-    def bin_and_split(self, xdata, ydata,test_size=0.2,equalize_train=True,equalize_test=True):
+    def bin_and_split(self, xdata, ydata, test_size=0.2, equalize_train=True, equalize_test=True):
         """
         generator to handle trial binning and splitting into training and testing sets.
 
@@ -397,7 +376,7 @@ class Wrangler:
             equalize_train: bool (default True), whether to equalize the number of trials across conditions
                 in the training set by moving extra trials to the test set
             equalize_test: bool (default True), whether to equalize the number of testing trials across conditions by deleting extras
-        
+
         Returns:
             x_train: np.ndarray, shape (n_train,n_chans,n_timepoints) -  EEG training data
             x_test: np.ndarray, shape (n_test,n_chans,n_timepoints) - EEG testing data
@@ -407,26 +386,22 @@ class Wrangler:
         """
 
         for self.ifold in range(self.n_folds):
-            xdata_binned, ydata_binned = self.bin_trials(xdata, ydata) # bin trials and relabel conditions
+            xdata_binned, ydata_binned = self.bin_trials(xdata, ydata)  # bin trials and relabel conditions
             ydata_binned = self._relabel_trials(ydata_binned)
-
 
             x_train, x_test, y_train, y_test = train_test_split(
                 xdata_binned, ydata_binned, test_size=test_size, stratify=ydata_binned
-            ) # do main train_test split. Stratifies such that there are an equal proportion of each condition in each set
-
+            )  # do main train_test split. Stratifies such that there are an equal proportion of each condition in each set
 
             # if cross-decoding ensure that appropriate conditions appear in each set
-            if self.training_conditions != self.testing_conditions: 
+            if self.training_conditions != self.testing_conditions:
 
-                x_train, y_train = self._select_labels(
-                    x_train, y_train, self.training_conditions, code_dict=self.group_dict
-                )
+                x_train, y_train = self._select_labels(x_train, y_train, self.training_conditions, code_dict=self.group_dict)
                 x_test, y_test = self._select_labels(x_test, y_test, self.testing_conditions, code_dict=self.group_dict)
             if equalize_train:
-                x_train,x_test,y_train,y_test = self._equalize_and_move_conditions(x_train,x_test,y_train,y_test)
+                x_train, x_test, y_train, y_test = self._equalize_and_move_conditions(x_train, x_test, y_train, y_test)
 
             if equalize_test:
-                x_test,y_test = self._equalize_conditions(x_test,y_test)
+                x_test, y_test = self._equalize_conditions(x_test, y_test)
 
             yield x_train, x_test, y_train, y_test
