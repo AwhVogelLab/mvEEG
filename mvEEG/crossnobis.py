@@ -1,8 +1,5 @@
 import numpy as np
-import pandas as pd
 from sklearn.covariance import LedoitWolf
-from sklearn.linear_model import LinearRegression
-from sklearn.model_selection import StratifiedShuffleSplit
 from sklearn.preprocessing import LabelEncoder
 
 
@@ -51,8 +48,8 @@ class Crossnobis:
             cond_means (np.ndarray, shape (n_conditions, n_channels)): Average value for each condition
             inv_cov (np.ndarray, shape (n_channels, n_channels)): Inverse covariance matrix
         """
-        cond_means = self._mean_by_condition(X, conds) # get condition averages
-        cond_means_for_each_trial = cond_means[conds] # get a trials x channels array of mean values
+        cond_means = self._mean_by_condition(X, conds)  # get condition averages
+        cond_means_for_each_trial = cond_means[conds]  # get a trials x channels array of mean values
         X_demean = X - cond_means_for_each_trial  # demean
         inv_cov = LedoitWolf(assume_centered=True).fit(X_demean).precision_
 
@@ -89,7 +86,7 @@ class Crossnobis:
             X_test (np.ndarray, shape (n_trials, n_channels)): Testing data
             y_train (np.ndarray): Training labels
             y_test (np.ndarray): Testing labels
-        
+
         Returns:
             rdm (np.ndarray, shape (n_conditions, n_conditions)): RDM
         """

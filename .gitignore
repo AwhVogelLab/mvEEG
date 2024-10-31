@@ -167,3 +167,6 @@ cython_debug/
 
 # manual
 test_notebook.ipynb
+
+# MacOS
+.DS_Store

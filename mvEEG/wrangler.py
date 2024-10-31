@@ -84,7 +84,10 @@ class Wrangler:
         else:
             self.subs = included_subs
             if any([sub in included_subs for sub in dropped_subs]):
-                raise ValueError("Included and dropped subjects overlap" + f"subjects: {[sub for sub in dropped_subs if sub in included_subs]}")
+                raise ValueError(
+                    "Included and dropped subjects overlap"
+                    + f"subjects: {[sub for sub in dropped_subs if sub in included_subs]}"
+                )
 
         self.nsub = len(self.subs)
         self.trim_timepoints = trim_timepoints
@@ -137,7 +140,9 @@ class Wrangler:
         if testing_groups is None:
             testing_groups = training_groups
 
-        training_groups = [cond.split("/") if "/" in cond else [cond] for cond in training_groups]  # split into subgroups
+        training_groups = [
+            cond.split("/") if "/" in cond else [cond] for cond in training_groups
+        ]  # split into subgroups
         testing_groups = [cond.split("/") if "/" in cond else [cond] for cond in testing_groups]
 
         self.training_conditions = []
@@ -148,24 +153,29 @@ class Wrangler:
         # TODO: make this exposed to the user?
 
         self.group_dict = defaultdict(None)
-
         for igroup, group in enumerate(training_groups):
             for condition in self.conditions:
-                if all([subgroup in condition.split("/") for subgroup in group]):  # check if all subgroups are in condition
+                if all(
+                    [subgroup in condition.split("/") for subgroup in group]
+                ):  # check if all subgroups are in condition
                     self.group_dict[condition] = igroup  # assign labels starting at 0
                     self.training_conditions.append(condition)
-        for igroup, group in enumerate(testing_groups):
+        igroup = len(training_groups)
+        for group in testing_groups:
             if group not in training_groups:
                 for condition in self.conditions:
                     if all([subgroup in condition.split("/") for subgroup in group]):
-                        self.group_dict[condition] = len(training_groups) + igroup  # offset by number of training groups
+                        self.group_dict[condition] = igroup
                         self.testing_conditions.append(condition)
+                igroup += 1
             else:
                 for condition in self.conditions:
                     if all([subgroup in condition.split("/") for subgroup in group]):
                         self.testing_conditions.append(condition)
 
-    def load_eeg(self, isub, drop_chans_manual=[], reject=True, time_bin=True):
+    def load_eeg(
+        self, isub, drop_chans_manual=[], reject=True, time_bin=True, select_from_labels=True, selection_kwargs=None
+    ):
         """
         Function to load in EEG data for a given subject and do basic preprocessing
 
@@ -211,7 +221,9 @@ class Wrangler:
 
         xdata = epochs.get_data()
 
-        xdata, events = self._select_labels(xdata, events)  # select out labels in conditions
+        if select_from_labels:
+            selection_kwargs = {} if selection_kwargs is None else selection_kwargs
+            xdata, events = self._select_labels(xdata, events, **selection_kwargs)  # select out labels in conditions
         if time_bin:  # average within time bins (disable for ERP analyses)
             xdata_time_binned = np.zeros((xdata.shape[0], xdata.shape[1], len(self.t)))
             for tidx, t in enumerate(self.t):  # average over time dimension
@@ -292,7 +304,9 @@ class Wrangler:
 
         min_per_cond = min_per_cond - min_per_cond % self.trial_bin_size  # nearest multiple of trial_bin_size
 
-        xdata, ydata = self._equalize_conditions(xdata, ydata, n_trials_per=min_per_cond)  # equalize trials across conditions
+        xdata, ydata = self._equalize_conditions(
+            xdata, ydata, n_trials_per=min_per_cond
+        )  # equalize trials across conditions
 
         if self.trial_bin_size == 1:  # if not binning, just return the trimmed inputs
             return xdata, ydata
@@ -396,7 +410,9 @@ class Wrangler:
             # if cross-decoding ensure that appropriate conditions appear in each set
             if self.training_conditions != self.testing_conditions:
 
-                x_train, y_train = self._select_labels(x_train, y_train, self.training_conditions, code_dict=self.group_dict)
+                x_train, y_train = self._select_labels(
+                    x_train, y_train, self.training_conditions, code_dict=self.group_dict
+                )
                 x_test, y_test = self._select_labels(x_test, y_test, self.testing_conditions, code_dict=self.group_dict)
             if equalize_train:
                 x_train, x_test, y_train, y_test = self._equalize_and_move_conditions(x_train, x_test, y_train, y_test)

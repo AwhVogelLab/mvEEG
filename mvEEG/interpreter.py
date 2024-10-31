@@ -1,21 +1,15 @@
 import numpy as np
-import mne_bids
-import pandas as pd
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import seaborn as sns
 import scipy.stats as sista
-import statsmodels as sm
 from statsmodels.stats.multitest import multipletests
 from .dataloader import DataLoader
-from pathlib import Path
-from collections import defaultdict
+import pingouin as pg
 
 mpl.rcParams["font.sans-serif"] = "Arial"
 mpl.rcParams["font.family"] = "sans-serif"
-import os
-import re
-import pingouin as pg
+mpl.rcParams["svg.fonttype"] = "none"
 
 
 class Interpreter:
@@ -66,7 +60,7 @@ class Interpreter:
     plot_2_contrasts_bar(dsets, pairs, labels, t_start=200, ax=None, significance_between=False, sig_y=1, test_tail="two-sided", ylim=None, title=None, **kwargs):
         Plots two hyperplane contrasts as a bar graph and computes the Bayes factor between the two.
     """
-    
+
     def __init__(
         self,
         labels: list,
@@ -76,15 +70,17 @@ class Interpreter:
         subs: list | None = None,
         trial_phases: dict | None = None,
     ):
-        
-        self.dataset = DataLoader(root_dir=data_dir,
-                                  data_type="classification",
-                                  experiment_name=experiment_name,
-                                  descriptions=descriptions,
-                                  subs=subs)
-        
+
+        self.dataset = DataLoader(
+            root_dir=data_dir,
+            data_type="classification",
+            experiment_name=experiment_name,
+            descriptions=descriptions,
+            subs=subs,
+        )
+
         self.labels = labels
-        self.colors = ["royalblue", "firebrick", "forestgreen", "orange", "purple"]
+        self.colors = ["royalblue", "firebrick", "forestgreen", "orange", "purple", "cyan"]
         self.trial_phases = trial_phases
 
     @staticmethod
@@ -100,19 +96,18 @@ class Interpreter:
 
     @staticmethod
     def plot_single_phase(ax, phase_time, ylim, hide=False, color="gray", title=None, fontsize=16):
-
         """
         plots stim bar and does type checking.
         Args:
             ax (matplotlib.axes.Axes): Axis to plot into.
             phase_time (iterable): Iterable of 2 ints.
             ylim (tuple): Y-axis limits of the figure.
-            hide (bool, optional): Set to True to not actually plot the bar but return 
+            hide (bool, optional): Set to True to not actually plot the bar but return
                                    a stim time. Defaults to False.
         """
         if hide:
             return
-        
+
         assert len(ylim) == 2, "ylim should be a list of 2 floats"
         assert len(phase_time) == 2, "phase_time should be a list or tuple of 2 numbers"
 
@@ -130,7 +125,7 @@ class Interpreter:
         if title is not None:
             ax.text(
                 np.mean(phase_time),
-                phase_upper*.95 + phase_lower * 0.05,
+                phase_upper * 0.95 + phase_lower * 0.05,
                 title,
                 fontsize=16,
                 verticalalignment="top",
@@ -145,7 +140,7 @@ class Interpreter:
             ax (matplotlib.axes.Axes): Axis to plot into.
             trial_phases (dict): Dictionary of trial phases.
             ylim (tuple): Y-axis limits of the figure.
-            hide (bool, optional): Set to True to not actually plot the bar but return 
+            hide (bool, optional): Set to True to not actually plot the bar but return
                                    a stim time. Defaults to False.
         """
         if hide:
@@ -165,9 +160,7 @@ class Interpreter:
             )
 
     @staticmethod
-    def do_significance_testing(
-        t, a, b=0, test=None, alternative="two-sided", correction_method="fdr_bh"
-    ):
+    def do_significance_testing(t, a, b=0, test=None, alternative="two-sided", correction_method="fdr_bh"):
         """
         Perform significance testing on the provided data.
         Parameters:
@@ -182,7 +175,6 @@ class Interpreter:
             - p (array-like): p-values after testing and correction.
             - sig05 (array-like): Boolean array indicating significance at the 0.05 level.
         """
-
 
         if test is None:
             if type(b) == int or type(b) == float:
@@ -213,7 +205,7 @@ class Interpreter:
         color="tab:red",
         sig_y=None,
         label=None,
-        trial_phases=None
+        trial_phases=None,
     ):
         """
         Plots accuracy for one subject for one condition
@@ -235,9 +227,7 @@ class Interpreter:
 
         # extract values and average over iterations
 
-        acc, acc_shuff, t = self.dataset.get_data(
-            dset, keys=["accuracy", "shuffledAccuracy", "times"]
-        )
+        acc, acc_shuff, t = self.dataset.get_data(dset, keys=["accuracy", "shuffledAccuracy", "times"])
 
         acc = acc.mean(1)
         acc_shuff = acc_shuff.mean(1)
@@ -257,9 +247,7 @@ class Interpreter:
         ax.fill_between(t, acc_shuff_upper, acc_shuff_lower, color="gray", alpha=0.5)
 
         if significance_testing:
-            p, sig05 = self.do_significance_testing(
-                t, acc, acc_shuff, alternative="greater"
-            )
+            p, sig05 = self.do_significance_testing(t, acc, acc_shuff, alternative="greater")
             ax.scatter(
                 t[t > 0][sig05],
                 np.full(sum(sig05), sig_y),
@@ -268,9 +256,7 @@ class Interpreter:
                 marker="s",
                 zorder=999,
             )
-            print(
-                f"% timepoints significant: {round(sum(sig05)/len(sig05)*100,2)} ({sum(sig05)}/{len(sig05)})%"
-            )
+            print(f"% timepoints significant: {round(sum(sig05)/len(sig05)*100,2)} ({sum(sig05)}/{len(sig05)})%")
 
         if not skip_aesthetics:
             trial_phases = self.trial_phases if trial_phases is None else trial_phases
@@ -295,7 +281,7 @@ class Interpreter:
             if title is not None:
                 ax.set_title(title, fontsize=18)
         return ax
-    
+
     def plot_acc_indiv(
         self,
         dset=None,
@@ -310,7 +296,7 @@ class Interpreter:
         color="tab:red",
         sig_y=None,
         label=None,
-        trial_phases=None
+        trial_phases=None,
     ):
         """
         Plots accuracy for one subject for one condition
@@ -332,9 +318,7 @@ class Interpreter:
 
         # extract values and average over iterations
 
-        acc, acc_shuff, t = self.dataset.get_data(
-            dset, keys=["accuracy", "shuffledAccuracy", "times"]
-        )
+        acc, acc_shuff, t = self.dataset.get_data(dset, keys=["accuracy", "shuffledAccuracy", "times"])
 
         if subplot_shape is None:
             subplot_shape = (1, acc.shape[0])
@@ -359,9 +343,7 @@ class Interpreter:
             ax.fill_between(t, acc_shuff_upper, acc_shuff_lower, color="gray", alpha=0.5)
 
             if significance_testing:
-                p, sig05 = self.do_significance_testing(
-                    t, acc_sub, acc_shuff_sub, alternative="greater"
-                )
+                p, sig05 = self.do_significance_testing(t, acc_sub, acc_shuff_sub, alternative="greater")
                 ax.scatter(
                     t[t > 0][sig05],
                     np.full(sum(sig05), sig_y),
@@ -370,9 +352,7 @@ class Interpreter:
                     marker="s",
                     zorder=999,
                 )
-                print(
-                    f"% timepoints significant: {round(sum(sig05)/len(sig05)*100,2)} ({sum(sig05)}/{len(sig05)})%"
-                )
+                print(f"% timepoints significant: {round(sum(sig05)/len(sig05)*100,2)} ({sum(sig05)}/{len(sig05)})%")
 
             if not skip_aesthetics:
                 trial_phases = self.trial_phases if trial_phases is None else trial_phases
@@ -397,7 +377,6 @@ class Interpreter:
         return fig
 
     def plot_hyperplane(
-
         self,
         labels,
         dset=None,
@@ -416,9 +395,8 @@ class Interpreter:
         sig_ys=(0.2),
         alternatives=["greater"],
         sig_colors=["C0"],
-        trial_phases=None
+        trial_phases=None,
     ):
-
         """
         Plots the hyperplane for the given dataset and labels.
         Parameters:
@@ -474,7 +452,7 @@ class Interpreter:
         if len(condition_subset) == 0:
             raise ValueError(f"No conditions were selected from {self.labels}")
 
-        for i,condition in enumerate(condition_subset):
+        for i, condition in enumerate(condition_subset):
             mean, upper, lower = self.get_plot_line(confidence_scores[:, condition])
             ax.plot(t, mean, color=self.colors[i], label=self.labels[i], linewidth=2)
             ax.fill_between(t, upper, lower, color=self.colors[i], alpha=0.5)
@@ -499,13 +477,11 @@ class Interpreter:
             if len(alternatives) < len(sig_pairs):
                 alternatives = alternatives + [[alternatives[0]] * (len(sig_pairs) - len(alternatives))][0]
             if len(sig_colors) < len(sig_pairs):
-                sig_colors = sig_colors + [f'C{i}' for i in range(len(sig_colors),len(sig_pairs))]
+                sig_colors = sig_colors + [f"C{i}" for i in range(len(sig_colors), len(sig_pairs))]
             if len(sig_ys) < len(sig_pairs):
-                sig_ys = sig_ys + [sig_ys[-1] + 0.2 * i for i in range(len(sig_pairs)-len(sig_ys))]
+                sig_ys = sig_ys + [sig_ys[-1] + 0.2 * i for i in range(len(sig_pairs) - len(sig_ys))]
 
-            for pair, alternative, color, y in zip(
-                sig_pairs, alternatives, sig_colors, sig_ys
-            ):
+            for pair, alternative, color, y in zip(sig_pairs, alternatives, sig_colors, sig_ys):
                 p, sig05 = self.do_significance_testing(
                     t,
                     confidence_scores[:, pair[0]],
@@ -544,18 +520,11 @@ class Interpreter:
             fontsize=12,
             ha="center",
         )
-        plt.text(
-            stim_label_xy[0], stim_label_xy[1], "Stim", fontsize=14, ha="center", c="k"
-        )
-        plt.arrow(
-            label_text_x, arrow_ys[0], 0, -1, head_width=45, head_length=0.25, color="k"
-        )
-        plt.arrow(
-            label_text_x, arrow_ys[1], 0, 1, head_width=45, head_length=0.25, color="k"
-        )
+        plt.text(stim_label_xy[0], stim_label_xy[1], "Stim", fontsize=14, ha="center", c="k")
+        plt.arrow(label_text_x, arrow_ys[0], 0, -1, head_width=45, head_length=0.25, color="k")
+        plt.arrow(label_text_x, arrow_ys[1], 0, 1, head_width=45, head_length=0.25, color="k")
 
-
-    def _get_pair_from_label(self,pair):
+    def _get_pair_from_label(self, pair):
         """
         Helper function to translate labeled pairs into numerical ones
         """
@@ -583,7 +552,7 @@ class Interpreter:
         color="tab:red",
         sig_y=None,
         label=None,
-        trial_phases=None
+        trial_phases=None,
     ):
         """
         Plots accuracy for one subject for one condition
@@ -605,9 +574,7 @@ class Interpreter:
         pair = self._get_pair_from_label(pair)
 
         confidence_scores, t = self.dataset.get_data(dset, keys=["confidenceScores", "times"])
-        contrast = np.mean(
-            confidence_scores[:, :, pair[1]] - confidence_scores[:, :, pair[0]], axis=1
-        )
+        contrast = np.mean(confidence_scores[:, :, pair[1]] - confidence_scores[:, :, pair[0]], axis=1)
 
         mean, upper, lower = self.get_plot_line(contrast)
 
@@ -620,9 +587,7 @@ class Interpreter:
         ax.fill_between(t, upper, lower, color=color, alpha=0.5)
 
         if significance_testing:
-            p, sig05 = self.do_significance_testing(
-                t, contrast, 0, alternative="greater"
-            )
+            p, sig05 = self.do_significance_testing(t, contrast, 0, alternative="greater")
             ax.scatter(
                 t[t > 0][sig05],
                 np.full(sum(sig05), sig_y),
@@ -631,9 +596,7 @@ class Interpreter:
                 marker="s",
                 zorder=999,
             )
-            print(
-                f"% timepoints significant: {round(sum(sig05)/len(sig05)*100,2)} ({sum(sig05)}/{len(sig05)})%"
-            )
+            print(f"% timepoints significant: {round(sum(sig05)/len(sig05)*100,2)} ({sum(sig05)}/{len(sig05)})%")
 
         if not skip_aesthetics:
             trial_phases = self.trial_phases if trial_phases is None else trial_phases
@@ -739,7 +702,6 @@ class Interpreter:
         return ax
 
     ## functions to plot multiple of something
-
     def plot_2_contrasts(
         self,
         dsets,
@@ -751,10 +713,9 @@ class Interpreter:
         sig_y_between=3,
         sig_color="C2",
         test_tail="two-sided",
-        sig_ys = [-0.5,-0.6],
+        sig_ys=(-0.5, -0.6),
         **kwargs,
     ):
-        
         """
         Plots two hyperplane contrast graphs on the axis. Useful for comparing crosstraining.
 
@@ -762,7 +723,7 @@ class Interpreter:
 
         Arguments:
         dsets (list of 2 str): descriptions of the conditions to plot. One per line
-        pairs (list of 2 tuples): pairs of conditions to compare. eg: [("C2",'C1"),("O2","O1")]. 
+        pairs (list of 2 tuples): pairs of conditions to compare. eg: [("C2",'C1"),("O2","O1")].
         labels (list of 2 str): labels for the legend
         colors (list of 2 str): colors for each line
         ax (matplotlib axis): axis to plot into (creates if doesn't exist)
@@ -770,7 +731,7 @@ class Interpreter:
         sig_y_between (float): y position of significance dots
         sig_color (str): color of significance dots
         test_tail (str): tail of the test to run
-        sig_ys (list of 2 floats): y position of significance dots for 
+        sig_ys (list of 2 floats): y position of significance dots for
         Other kwargs are passed to plot_hyperplane_contrast
 
 
@@ -789,7 +750,7 @@ class Interpreter:
             pair=pairs[0],
             label=labels[0],
             ax=ax,
-            sig_y = sig_ys[0],
+            sig_y=sig_ys[0],
             **kwargs,
         )
         self.plot_hyperplane_contrast(
@@ -799,7 +760,7 @@ class Interpreter:
             label=labels[1],
             ax=ax,
             skip_aesthetics=True,
-            sig_y = sig_ys[1],
+            sig_y=sig_ys[1],
             **kwargs,
         )
         ax.legend(custom_lines, labels, loc="lower right", frameon=True, fontsize=11)
@@ -810,16 +771,10 @@ class Interpreter:
             pair0 = self._get_pair_from_label(pairs[0])
             pair1 = self._get_pair_from_label(pairs[1])
 
-            contrast_1 = np.mean(
-                cs1[:, :, pair0[1]] - cs1[:, :, pair0[0]], axis=1
-            )
-            contrast_2 = np.mean(
-                cs2[:, :, pair1[1]] - cs2[:, :, pair1[0]], axis=1
-            )
+            contrast_1 = np.mean(cs1[:, :, pair0[1]] - cs1[:, :, pair0[0]], axis=1)
+            contrast_2 = np.mean(cs2[:, :, pair1[1]] - cs2[:, :, pair1[0]], axis=1)
 
-            p, sig05 = self.do_significance_testing(
-                t, contrast_1, contrast_2, alternative=test_tail
-            )
+            p, sig05 = self.do_significance_testing(t, contrast_1, contrast_2, alternative=test_tail)
             ax.scatter(
                 t[t > 0][sig05],
                 np.full(sum(sig05), sig_y_between),
@@ -845,7 +800,6 @@ class Interpreter:
         title=None,
         **kwargs,
     ):
-        
         """
         Plots two hyperplane contrasts as a bar graph. Also computes the bayes-factor between the two.
 
@@ -875,14 +829,9 @@ class Interpreter:
         pair1 = self._get_pair_from_label(pairs[1])
 
         contrasts = [
-            np.mean(cs1[:, :, pair0[1]][..., t > t_start] 
-                    - cs1[:, :, pair0[0]][..., t > t_start],
-                    axis=(1,2)),
-            np.mean(cs2[:, :, pair1[1]][..., t > t_start]
-                    - cs2[:, :, pair1[0]][..., t > t_start],
-                    axis=(1,2))
+            np.mean(cs1[:, :, pair0[1]][..., t > t_start] - cs1[:, :, pair0[0]][..., t > t_start], axis=(1, 2)),
+            np.mean(cs2[:, :, pair1[1]][..., t > t_start] - cs2[:, :, pair1[0]][..., t > t_start], axis=(1, 2)),
         ]
-
 
         ax = sns.barplot(data=contrasts, errorbar="se", ax=ax, **kwargs)
         if ylim is not None:
@@ -896,8 +845,6 @@ class Interpreter:
         stats = pg.ttest(contrasts[0], contrasts[1], paired=True, alternative=test_tail)
         p = stats["p-val"].values[0]
 
-
-
         if significance_between:
             ax.plot([0, 1], [sig_y, sig_y], "k")
 
@@ -910,7 +857,5 @@ class Interpreter:
             else:
                 stars = "***"
             ax.set_title(title)
-            ax.text(
-                0.5, sig_y + 0.05, f'{stars}\nBF10 = {stats["BF10"].values[0]}', ha="center"
-            )
+            ax.text(0.5, sig_y + 0.05, f'{stars}\nBF10 = {stats["BF10"].values[0]}', ha="center")
             print(stats)
