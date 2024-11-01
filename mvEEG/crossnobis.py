@@ -99,15 +99,34 @@ class Crossnobis:
         )
         return rdm
 
+    def temporally_generalize(self, X_train, X_test, y_train, y_test):
+        """
+        Perform temporal generalization of crossnobis
+        across different time points for training and testing data.
 
-def temporally_generalize(self, X_train, X_test, y_train, y_test):
-    ntimes = X_train.shape[2]
-    rdms = np.full((self.n_labels, self.n_labels, ntimes, ntimes), np.nan)
+        Parameters:
+        X_train : ndarray
+            Training data of shape (n_samples, n_features, n_times).
+        X_test : ndarray
+            Testing data of shape (n_samples, n_features, n_times).
+        y_train : ndarray
+            Labels for the training data of shape (n_samples,).
+        y_test : ndarray
+            Labels for the testing data of shape (n_samples,).
 
-    for itime in range(ntimes):  # train times
-        means_i, noise_i = self._means_and_prec(X_train[:, :, itime], y_train)
-        for jtime in range(ntimes):  # test times
-            means_j = self._mean_by_condition(X_test[:, :, jtime], y_test)
-            rdms[:, itime, jtime] = _calc_rdm_crossnobis_single(means_i, means_j, noise_i)
+        Returns:
+        rdms : ndarray
+            Representational dissimilarity matrices of shape
+            (n_labels, n_labels, n_times, n_times) containing the RDMs
+            for each pair of time points.
+        """
+        ntimes = X_train.shape[2]
+        rdms = np.full((self.n_labels, self.n_labels, ntimes, ntimes), np.nan)
 
-    return rdms
+        for itime in range(ntimes):  # train times
+            means_i, noise_i = self._means_and_prec(X_train[:, :, itime], y_train)
+            for jtime in range(ntimes):  # test times
+                means_j = self._mean_by_condition(X_test[:, :, jtime], y_test)
+                rdms[:, itime, jtime] = _calc_rdm_crossnobis_single(means_i, means_j, noise_i)
+
+        return rdms
