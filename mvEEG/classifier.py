@@ -123,6 +123,31 @@ class Classifier:
         return accs, accs_shuff, conf_mats, confidence_scores
 
     def temporally_generalize(self, X_train, X_test, y_train, y_test):
+        """
+        Perform temporal generalization by training and testing a classifier
+        across different time points and calculating accuracy, shuffled accuracy,
+        confusion matrices, and confidence scores.
+
+        Parameters:
+        X_train : ndarray
+            Training data of shape (n_samples, n_features, n_times).
+        X_test : ndarray
+            Testing data of shape (n_samples, n_features, n_times).
+        y_train : ndarray
+            Labels for the training data of shape (n_samples,).
+        y_test : ndarray
+            Labels for the testing data of shape (n_samples,).
+
+        Returns:
+        accs : ndarray
+            Accuracy scores of shape (n_times, n_times) for each pair of train and test times.
+        accs_shuff : ndarray
+            Shuffled accuracy scores of shape (n_times, n_times) for each pair of train and test times.
+        conf_mats : ndarray
+            Confusion matrices of shape (n_labels, n_labels, n_times, n_times) for each pair of train and test times.
+        confidence_scores : ndarray
+            Confidence scores of shape (n_labels, n_times, n_times) for each pair of train and test times.
+        """
         ntimes = X_train.shape[2]
         accs = np.full((ntimes, ntimes), np.nan)
         accs_shuff = np.full((ntimes, ntimes), np.nan)

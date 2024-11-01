@@ -1,6 +1,7 @@
 import numpy as np
 from sklearn.covariance import LedoitWolf
 from sklearn.preprocessing import LabelEncoder
+from rsatoolbox.rdm.calc import _calc_rdm_crossnobis_single
 
 
 class Crossnobis:
@@ -14,7 +15,9 @@ class Crossnobis:
 
     """
 
-    def __init__(self):
+    def __init__(self, labels):
+        self.labels = labels
+        self.n_labels = len(labels)
         pass
 
     def _mean_by_condition(self, X, conds):
@@ -55,26 +58,7 @@ class Crossnobis:
 
         return cond_means, inv_cov
 
-    def _calc_rdm_crossnobis_single(self, X_train, X_test, precision):
-        """
-        Calculates RDM using LDC using means from x and y, and covariance
-        Largely taken from https://github.com/rsagroup/rsatoolbox/blob/main/src/rsatoolbox/rdm/calc.py#L469
-        Updated to return the signed square root of the RDM because
-        LDC is an estimator of the squared mahalonobis distance
-
-        Args:
-            X_train (np.ndarray, shape (n_conditions, n_channels)): Condition averages for training data (first measure)
-            meas2 (np.ndarray, shape (n_conditions, n_channels)): Condition averages for testing data (second measure)
-            noise (np.ndarray, shape (n_channels, n_channels)): Precision (inverse covariance) matrix
-
-        Returns:
-            rdm (np.ndarray, shape (n_conditions, n_conditions)): RDM
-        """
-        kernel = X_train @ precision @ X_test.T
-        rdm = np.expand_dims(np.diag(kernel), 0) + np.expand_dims(np.diag(kernel), 1) - kernel - kernel.T
-        return np.sign(rdm) * np.sqrt(np.abs(rdm))
-
-    def crossnobis_single(self, X_train, X_test, y_train, y_test):
+    def crossnobis(self, X_train, X_test, y_train, y_test):
         """
         Wrapper function to calculate crossnobis RDM over a single fold
         Uses condition means from both train and test, but only uses the training
@@ -92,7 +76,7 @@ class Crossnobis:
         """
         means_train, noise_train = self._means_and_prec(X_train, y_train)
         means_test = self._mean_by_condition(X_test, y_test)
-        rdm = self._calc_rdm_crossnobis_single(means_train, means_test, noise_train)
+        rdm = _calc_rdm_crossnobis_single(means_train, means_test, noise_train)
         return rdm
 
     def crossnobis_across_time(self, X_train, X_test, y_train, y_test):
@@ -111,9 +95,19 @@ class Crossnobis:
         ntimes = X_train.shape[2]
 
         rdm = np.stack(
-            [
-                self.crossnobis_single(X_train[:, :, itime], X_test[:, :, itime], y_train, y_test)
-                for itime in range(ntimes)
-            ]
+            [self.crossnobis(X_train[:, :, itime], X_test[:, :, itime], y_train, y_test) for itime in range(ntimes)]
         )
         return rdm
+
+
+def temporally_generalize(self, X_train, X_test, y_train, y_test):
+    ntimes = X_train.shape[2]
+    rdms = np.full((self.n_labels, self.n_labels, ntimes, ntimes), np.nan)
+
+    for itime in range(ntimes):  # train times
+        means_i, noise_i = self._means_and_prec(X_train[:, :, itime], y_train)
+        for jtime in range(ntimes):  # test times
+            means_j = self._mean_by_condition(X_test[:, :, jtime], y_test)
+            rdms[:, itime, jtime] = _calc_rdm_crossnobis_single(means_i, means_j, noise_i)
+
+    return rdms
