@@ -112,17 +112,6 @@ class Wrangler:
         t_step_ms = int(t_step // (self.times[1] - self.times[0]))
         self.t = self.times.astype(int)[t_step_ms:-t_step_ms:t_step_ms]
 
-        self.chans_to_drop = []
-        ch_names = np.array(epochs.ch_names)
-        ch_types = np.array(epochs.get_channel_types())
-        for chan_type in self.dropped_chans.keys():  # drop irrelevant channels
-            if self.dropped_chans[chan_type] == "ALL":
-                self.chans_to_drop.extend(ch_names[ch_types == chan_type])
-            else:
-                self.chans_to_drop.extend(self.dropped_chans[chan_type])
-
-        self.ch_names = np.setdiff1d(ch_names, self.chans_to_drop, assume_unique=True)
-
         # make a condition dict if it doesn't exist
         if self.condition_dict is None:
             events = pd.read_csv(sub_path.update(suffix="events", extension=".tsv").fpath, sep="\t")
@@ -173,6 +162,17 @@ class Wrangler:
                     if all([subgroup in condition.split("/") for subgroup in group]):
                         self.testing_conditions.append(condition)
 
+    def get_drop_chans(self, epochs):
+        chans_to_drop = []
+        ch_names = np.array(epochs.ch_names)
+        ch_types = np.array(epochs.get_channel_types())
+        for chan_type in self.dropped_chans.keys():  # drop irrelevant channels
+            if self.dropped_chans[chan_type] == "ALL":
+                chans_to_drop.extend(ch_names[ch_types == chan_type])
+            else:
+                chans_to_drop.extend(self.dropped_chans[chan_type])
+        return chans_to_drop
+
     def load_eeg(
         self, isub, drop_chans_manual=[], reject=True, time_bin=True, select_from_labels=True, selection_kwargs=None
     ):
@@ -197,8 +197,7 @@ class Wrangler:
         events = pd.read_csv(sub_path.update(suffix="events", extension=".tsv").fpath, sep="\t")["value"].to_numpy()
 
         # drop unwanted channels
-
-        chans_to_drop = self.chans_to_drop.copy()
+        chans_to_drop = self.get_drop_chans(epochs)
         chans_to_drop.extend(drop_chans_manual)
 
         chans_to_drop = [chan for chan in chans_to_drop if chan in epochs.ch_names]
