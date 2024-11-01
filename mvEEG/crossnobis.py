@@ -18,7 +18,7 @@ class Crossnobis:
     def __init__(self, labels):
         self.labels = labels
         self.n_labels = len(labels)
-        self.r, self.c = np.triu_indices(self.n_labels, k=1)  # indices for upper triangle of RDM
+        self.triu = np.triu_indices(self.n_labels, k=1)  # indices for upper triangle of RDM
         pass
 
     def _mean_by_condition(self, X, conds):
@@ -79,7 +79,7 @@ class Crossnobis:
         means_test = self._mean_by_condition(X_test, y_test)
         rdm_triu = _calc_rdm_crossnobis_single(means_train, means_test, noise_train)
         result = np.zeros((self.n_labels, self.n_labels))
-        result[self.r, self.c] = rdm_triu
+        result[self.triu] = rdm_triu
         print(result.shape)
         return result
 
@@ -137,7 +137,6 @@ class Crossnobis:
 
         # reshape to n_labels x n_labels x n_times x n_times
         rdms_out = np.full((self.n_labels, self.n_labels, ntimes, ntimes), np.nan)
-        r, c = np.triu_indices(self.n_labels, k=1)
-        rdms_out[self.r, self.c, :, :] = rdms
+        rdms_out[*self.triu, :, :] = rdms
 
         return rdms_out
