@@ -18,6 +18,7 @@ class Crossnobis:
     def __init__(self, labels):
         self.labels = labels
         self.n_labels = len(labels)
+        self.r, self.c = np.triu_indices(self.n_labels, k=1)  # indices for upper triangle of RDM
         pass
 
     def _mean_by_condition(self, X, conds):
@@ -76,8 +77,11 @@ class Crossnobis:
         """
         means_train, noise_train = self._means_and_prec(X_train, y_train)
         means_test = self._mean_by_condition(X_test, y_test)
-        rdm = _calc_rdm_crossnobis_single(means_train, means_test, noise_train)
-        return rdm
+        rdm_triu = _calc_rdm_crossnobis_single(means_train, means_test, noise_train)
+        result = np.zeros((self.n_labels, self.n_labels))
+        result[self.r, self.c] = rdm_triu
+        print(result.shape)
+        return result
 
     def crossnobis_across_time(self, X_train, X_test, y_train, y_test):
         """
@@ -121,12 +125,19 @@ class Crossnobis:
             for each pair of time points.
         """
         ntimes = X_train.shape[2]
-        rdms = np.full((self.n_labels, self.n_labels, ntimes, ntimes), np.nan)
+        n_dists = self.n_labels * (self.n_labels - 1) // 2
+        rdms = np.full((n_dists, ntimes, ntimes), np.nan)
 
         for itime in range(ntimes):  # train times
             means_i, noise_i = self._means_and_prec(X_train[:, :, itime], y_train)
+
             for jtime in range(ntimes):  # test times
                 means_j = self._mean_by_condition(X_test[:, :, jtime], y_test)
                 rdms[:, itime, jtime] = _calc_rdm_crossnobis_single(means_i, means_j, noise_i)
 
-        return rdms
+        # reshape to n_labels x n_labels x n_times x n_times
+        rdms_out = np.full((self.n_labels, self.n_labels, ntimes, ntimes), np.nan)
+        r, c = np.triu_indices(self.n_labels, k=1)
+        rdms_out[self.r, self.c, :, :] = rdms
+
+        return rdms_out
