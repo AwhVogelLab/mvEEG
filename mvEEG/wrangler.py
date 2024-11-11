@@ -371,7 +371,7 @@ class Wrangler:
         for val, n_move in zip(train_labels, num_to_move):
             if val in y_test:
 
-                move_ixs = np.random.choice(np.where(y_test == val)[0], n_move, replace=False)
+                move_ixs = np.random.choice(np.where(y_train == val)[0], n_move, replace=False)
 
                 x_train, x_test = self._move_element(x_train, x_test, move_ixs)
                 y_train, y_test = self._move_element(y_train, y_test, move_ixs)
