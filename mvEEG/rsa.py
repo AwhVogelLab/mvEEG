@@ -279,6 +279,11 @@ class RSA:
         t_start, t_end: time range to use, default delay_period_start and end
         title: figure title
 
+
+        Returns:
+        ax: axis for further modification
+        stats: dataframe of test statistics
+
         """
         if ax is None:
             fig = plt.figure(facecolor="white", figsize=(8, 4))  # set up figure
@@ -316,6 +321,8 @@ class RSA:
         )  # plot correlations
 
         # significance testing
+        stats = []
+
         for i, factor in enumerate(fac_order):
             x = delay_summary_df.query(f'factor=="{factor}"')["semipartial correlation"].values
             # wilcoxcon rank-signed test
@@ -323,7 +330,7 @@ class RSA:
             if any(np.isnan(x)):
                 warnings.warn("Warning: Partial correlations contain nans. Check your data", RuntimeWarning)
             # print out test statistics and factors
-            print(factor, np.mean(x), w, p)
+            stats.append(pd.DataFrame([{"factor": factor, "mean": np.mean(x), "w": w, "p": p}]))
 
             ax.scatter(i, y_sig, alpha=0)  # dummy points to annotate
 
@@ -359,6 +366,9 @@ class RSA:
         ax.spines[["right", "top"]].set_visible(False)
         ax.set_title(title, fontsize=20, pad=20)
 
+        stats_df = pd.concat(stats)
+        return ax, stats_df
+
     def plot_corrs_temporal(
         self,
         title="Model Fits across time",
@@ -383,6 +393,10 @@ class RSA:
         y_sig: y level to START significance dots at (will go down below this)
         sig_size: size of significance dots
         kwargs: passed to sns.lineplot
+
+
+        Returns:
+        ax: axis for further modification
 
         """
 
@@ -422,6 +436,8 @@ class RSA:
             _, corrected_p, _, _ = multipletests(p_values, method="fdr_bh")
 
             sig05 = corrected_p < 0.05
+            print(f"{factor}: {sum(sig05)}/{len(sig05)} significant timepoints")
+
 
             ax.scatter(
                 self.t[self.t > 0][sig05],
