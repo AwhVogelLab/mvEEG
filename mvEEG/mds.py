@@ -13,6 +13,7 @@ class MDS:
         experiment_name: str,
         labels: str,
         subs: list = [],
+        description: str = "RSA",
         n_components=2,
         stress_thresh=0.1,
         stress_behavior: str = "warn",
@@ -20,19 +21,22 @@ class MDS:
         """
         Class to calculate MDS projections from a RDM and visualize them
         inputs:
-        times: list of timepoints each RDM is calculated at
-        labels: condition labels
-        file: filename where RDMS are stored
-        n_components: how many MDS dimensions to include. Usually 2 or 3. Most functions assume 2
+
+        root_dir: root BIDS directory
+        experiment_name: name of the experiment
+        labels: list of condition labels
+        subs: list of subjects to include
+        description: description keyword for data
+        n_components: how many MDS dimensions to include by default. Usually 2 or 3. Most functions assume 2
         stress_thresh: at what threshold is is the stress function problematic
         stress_behavior: "warn" or "raise" - whether to raise a warning or error if stress exceeds this
         """
 
         dataset = DataLoader(
-            root_dir=root_dir, data_type="rdms", experiment_name=experiment_name, descriptions=["RSA"], subs=subs
+            root_dir=root_dir, data_type="rdms", experiment_name=experiment_name, descriptions=[description], subs=subs
         )
 
-        self.rdms, self.t = dataset.get_data(dset="RSA", keys=["RDM", "times"])
+        self.rdms, self.t = dataset.get_data(dset=description, keys=["RDM", "times"])
         self.rdms = self.rdms.mean(1)
         self.rdms = np.moveaxis(self.rdms, 1, 3)  # move to subs x conds x conds x times
         self.nsub = self.rdms.shape[0]
@@ -140,20 +144,21 @@ class MDS:
         """
         self.ani_ax.clear()
         try:  # plot projection averaged across [itime,itime+1]
-            self.plot_MDS(
+            self.plot_MDS_2D(
                 ax=self.ani_ax,
                 t_start=self.ani_times[itime],
                 t_stop=self.ani_times[itime + 1],
                 title=f"{self.ani_times[itime]}<t<{self.ani_times[itime+1]}",
                 xlim=self.ani_xlim,
                 ylim=self.ani_ylim,
+                **self.mds_args
             )
 
         except ValueError as e:
             raise RuntimeError(f"i={itime},tstart={self.ani_times[itime]},tstop={self.ani_times[itime]}") from e
 
     def animate_MDS(
-        self, t_start, t_stop, t_step, filename="./animation.gif", fps=1, xlim=(-0.005, 0.005), ylim=(-0.005, 0.005)
+        self, t_start, t_stop, t_step, filename="./animation.gif", fps=1, xlim=(-0.005, 0.005), ylim=(-0.005, 0.005),**kwargs
     ):
         """
         Animates a MDS projection over time as a gif
@@ -172,7 +177,7 @@ class MDS:
 
         # set up times to iterate over
         self.ani_times = np.arange(t_start, t_stop + t_step, t_step)
-
+        self.mds_args = kwargs # fargs doesn't work well, workaround
         ani = FuncAnimation(
             fig, self._animation_wrapper, frames=len(self.ani_times) - 2, interval=500, repeat=False
         )  # instance matplotlib animator
@@ -193,8 +198,10 @@ class MDS:
         hide_axes: bool = True,
         isub=None,
         colors=None,
-        elev=20,
-        azim=65,
+        view=(20,65),
+        text_kwargs = None,
+        connect_pairs=None,
+        connect_line_color = None
     ):
         """
         Displays MDS projection, and labels each condition
@@ -211,8 +218,10 @@ class MDS:
         if ax is None:
             fig = plt.figure()
             ax = fig.add_subplot(projection="3d")
+        if text_kwargs is None:
+            text_kwargs = {}
 
-        ax.view_init(elev, azim)
+        ax.view_init(*view)
 
         if colors is None:
             colors = ["C0" for _ in range(len(self.labels))]
@@ -221,9 +230,20 @@ class MDS:
 
         for i, label in enumerate(self.labels):
             # labels points with condition labels
-            ax.text(x[i], y[i], z[i], label, ha="center", va="center", zorder=999, size=16)
-
+            ax.text(x[i], y[i], z[i], label, ha="center", va="center", zorder=999, **text_kwargs)
         ax.set_title(title)
+
+        if connect_pairs is not None:
+            # draw lines connecting all pairs
+            if connect_line_color is None:
+                connect_line_color = "k"
+            get_coords = lambda lab: np.array((x[self.labels.index(lab)], y[self.labels.index(lab)], z[self.labels.index(lab)]))
+            for (lab1, lab2) in connect_pairs:
+                xs, ys, zs = [(c1, c2) for c1, c2 in zip(get_coords(lab1), get_coords(lab2))]
+                ax.plot(xs, ys, zs, color=connect_line_color,linestyle='dashed',linewidth=2)
+
+
+
 
         if hide_axes:
             ax.set_xticklabels([])
