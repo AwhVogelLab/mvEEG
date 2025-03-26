@@ -5,6 +5,7 @@ import seaborn as sns
 import scipy.stats as sista
 from statsmodels.stats.multitest import multipletests
 from .dataloader import DataLoader
+from .plot_utils import get_plot_line, plot_trial_phases
 import pingouin as pg
 
 mpl.rcParams["font.sans-serif"] = "Arial"
@@ -83,81 +84,6 @@ class Interpreter:
         self.colors = ["royalblue", "firebrick", "forestgreen", "orange", "purple", "cyan"]
         self.trial_phases = trial_phases
 
-    @staticmethod
-    def get_plot_line(a):
-        """
-        Takes in 2D array of shape [subjects,time points].
-        Returns mean, and upper/lower SEM lines.
-        """
-        mean = a.mean(0)
-        sem = sista.sem(a, 0)
-        upper, lower = mean + sem, mean - sem
-        return mean, upper, lower
-
-    @staticmethod
-    def plot_single_phase(ax, phase_time, ylim, hide=False, color="gray", title=None, fontsize=16):
-        """
-        plots stim bar and does type checking.
-        Args:
-            ax (matplotlib.axes.Axes): Axis to plot into.
-            phase_time (iterable): Iterable of 2 ints.
-            ylim (tuple): Y-axis limits of the figure.
-            hide (bool, optional): Set to True to not actually plot the bar but return
-                                   a stim time. Defaults to False.
-        """
-        if hide:
-            return
-
-        assert len(ylim) == 2, "ylim should be a list of 2 floats"
-        assert len(phase_time) == 2, "phase_time should be a list or tuple of 2 numbers"
-
-        phase_lower = ylim[0]
-        phase_upper = ylim[1]
-
-        ax.fill_between(
-            phase_time,
-            [phase_lower, phase_lower],
-            [phase_upper, phase_upper],
-            color=color,
-            alpha=0.5,
-            zorder=-999,
-        )
-        if title is not None:
-            ax.text(
-                np.mean(phase_time),
-                phase_upper * 0.95 + phase_lower * 0.05,
-                title,
-                fontsize=16,
-                verticalalignment="top",
-                horizontalalignment="center",
-                color="black",
-            )
-
-    def plot_trial_phases(self, ax, trial_phases, ylim, hide=False):
-        """
-        Plots bars for multiple phases.
-        Args:
-            ax (matplotlib.axes.Axes): Axis to plot into.
-            trial_phases (dict): Dictionary of trial phases.
-            ylim (tuple): Y-axis limits of the figure.
-            hide (bool, optional): Set to True to not actually plot the bar but return
-                                   a stim time. Defaults to False.
-        """
-        if hide:
-            return
-
-        assert len(ylim) == 2, "ylim should be a list of 2 floats"
-
-        if type(trial_phases) is dict:
-            for phase, time in trial_phases.items():
-                self.plot_single_phase(ax, time, ylim, hide=hide, title=phase)
-        elif type(trial_phases) in [list, tuple] and type(trial_phases[0]) in [list, tuple]:
-            for phase_time in trial_phases:
-                self.plot_single_phase(ax, phase_time, ylim, hide=hide)
-        else:
-            raise TypeError(
-                "trial_phases should either be a dictionary, or an iterable of lists or tuples. If adding a single phase, use  plot_single_phase."
-            )
 
     @staticmethod
     def do_significance_testing(t, a, b=0, test=None, alternative="two-sided", correction_method="fdr_bh"):
@@ -232,8 +158,8 @@ class Interpreter:
         acc = acc.mean(1)
         acc_shuff = acc_shuff.mean(1)
 
-        acc_mean, acc_upper, acc_lower = self.get_plot_line(acc)
-        acc_shuff_mean, acc_shuff_upper, acc_shuff_lower = self.get_plot_line(acc_shuff)
+        acc_mean, acc_upper, acc_lower = get_plot_line(acc)
+        acc_shuff_mean, acc_shuff_upper, acc_shuff_lower = get_plot_line(acc_shuff)
 
         sig_y = chance - 0.05 if sig_y is None else sig_y
 
@@ -260,7 +186,7 @@ class Interpreter:
 
         if not skip_aesthetics:
             trial_phases = self.trial_phases if trial_phases is None else trial_phases
-            self.plot_trial_phases(ax, trial_phases, ylim)
+            plot_trial_phases(ax, trial_phases, ylim)
             ax.plot(t, np.ones((len(t))) * chance, "--", color="gray", zorder=0)
             # aesthetics
             ax.spines["right"].set_visible(False)
@@ -331,8 +257,8 @@ class Interpreter:
 
             ax = axes[i] if acc.shape[0] > 1 else axes
 
-            acc_mean, acc_upper, acc_lower = self.get_plot_line(acc_sub)
-            acc_shuff_mean, acc_shuff_upper, acc_shuff_lower = self.get_plot_line(acc_shuff_sub)
+            acc_mean, acc_upper, acc_lower = get_plot_line(acc_sub)
+            acc_shuff_mean, acc_shuff_upper, acc_shuff_lower = get_plot_line(acc_shuff_sub)
 
             sig_y = chance - 0.05 if sig_y is None else sig_y
 
@@ -356,7 +282,7 @@ class Interpreter:
 
             if not skip_aesthetics:
                 trial_phases = self.trial_phases if trial_phases is None else trial_phases
-                self.plot_trial_phases(ax, trial_phases, ylim)
+                plot_trial_phases(ax, trial_phases, ylim)
                 ax.plot(t, np.ones((len(t))) * chance, "--", color="gray", zorder=0)
                 # aesthetics
                 ax.spines["right"].set_visible(False)
@@ -453,7 +379,7 @@ class Interpreter:
             raise ValueError(f"No conditions were selected from {self.labels}")
 
         for i, condition in enumerate(condition_subset):
-            mean, upper, lower = self.get_plot_line(confidence_scores[:, condition])
+            mean, upper, lower = get_plot_line(confidence_scores[:, condition])
             ax.plot(t, mean, color=self.colors[i], label=self.labels[i], linewidth=2)
             ax.fill_between(t, upper, lower, color=self.colors[i], alpha=0.5)
 
@@ -470,7 +396,7 @@ class Interpreter:
         plt.ylim(ylim)
 
         trial_phases = self.trial_phases if trial_phases is None else trial_phases
-        self.plot_trial_phases(ax, trial_phases, ylim)
+        plot_trial_phases(ax, trial_phases, ylim)
 
         if significance_testing:
             sig_pairs = [self._get_pair_from_label(pair) for pair in sig_pairs]
@@ -576,7 +502,7 @@ class Interpreter:
         confidence_scores, t = self.dataset.get_data(dset, keys=["confidenceScores", "times"])
         contrast = np.mean(confidence_scores[:, :, pair[1]] - confidence_scores[:, :, pair[0]], axis=1)
 
-        mean, upper, lower = self.get_plot_line(contrast)
+        mean, upper, lower = get_plot_line(contrast)
 
         sig_y = -0.05 if sig_y is None else sig_y
 
@@ -600,7 +526,7 @@ class Interpreter:
 
         if not skip_aesthetics:
             trial_phases = self.trial_phases if trial_phases is None else trial_phases
-            self.plot_trial_phases(ax, trial_phases, ylim)
+            plot_trial_phases(ax, trial_phases, ylim)
             ax.plot(t, np.zeros((len(t))), "--", color="gray", zorder=0)
             # aesthetics
             ax.spines["right"].set_visible(False)
