@@ -80,7 +80,7 @@ class Crossnobis:
         rdm_triu = _calc_rdm_crossnobis_single(means_train, means_test, noise_train)
         result = np.zeros((self.n_labels, self.n_labels))
         result[self.triu] = rdm_triu
-        result += result.T # add in lower triangle to RDM
+        result += result.T  # add in lower triangle to RDM
         return result
 
     def crossnobis_across_time(self, X_train, X_test, y_train, y_test):
@@ -138,7 +138,6 @@ class Crossnobis:
         # reshape to n_labels x n_labels x n_times x n_times
         rdms_out = np.zeros((self.n_labels, self.n_labels, ntimes, ntimes))
         rdms_out[*self.triu, :, :] = rdms
-        rdms_out += rdms_out.transpose(1,0,2,3) # add in lower triangle
-
+        rdms_out += rdms_out.transpose(1, 0, 2, 3)  # add in lower triangle
 
         return rdms_out

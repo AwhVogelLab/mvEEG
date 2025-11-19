@@ -151,14 +151,22 @@ class MDS:
                 title=f"{self.ani_times[itime]}<t<{self.ani_times[itime+1]}",
                 xlim=self.ani_xlim,
                 ylim=self.ani_ylim,
-                **self.mds_args
+                **self.mds_args,
             )
 
         except ValueError as e:
             raise RuntimeError(f"i={itime},tstart={self.ani_times[itime]},tstop={self.ani_times[itime]}") from e
 
     def animate_MDS(
-        self, t_start, t_stop, t_step, filename="./animation.gif", fps=1, xlim=(-0.005, 0.005), ylim=(-0.005, 0.005),**kwargs
+        self,
+        t_start,
+        t_stop,
+        t_step,
+        filename="./animation.gif",
+        fps=1,
+        xlim=(-0.005, 0.005),
+        ylim=(-0.005, 0.005),
+        **kwargs,
     ):
         """
         Animates a MDS projection over time as a gif
@@ -177,7 +185,7 @@ class MDS:
 
         # set up times to iterate over
         self.ani_times = np.arange(t_start, t_stop + t_step, t_step)
-        self.mds_args = kwargs # fargs doesn't work well, workaround
+        self.mds_args = kwargs  # args doesn't work well, workaround
         ani = FuncAnimation(
             fig, self._animation_wrapper, frames=len(self.ani_times) - 2, interval=500, repeat=False
         )  # instance matplotlib animator
@@ -198,10 +206,11 @@ class MDS:
         hide_axes: bool = True,
         isub=None,
         colors=None,
-        view=(20,65),
-        text_kwargs = None,
+        point_size=10,
+        view=(20, 65),
+        text_kwargs=None,
         connect_pairs=None,
-        connect_line_color = None
+        connect_line_color=None,
     ):
         """
         Displays MDS projection, and labels each condition
@@ -226,7 +235,7 @@ class MDS:
         if colors is None:
             colors = ["C0" for _ in range(len(self.labels))]
         x, y, z = self._calculate_MDS(t_start, t_stop, isub=isub, n_components=3)
-        ax.scatter(x, y, z, alpha=1, facecolors=colors, s=10)  # draws circles centered at points
+        ax.scatter(x, y, z, alpha=1, facecolors=colors, s=point_size)  # draws circles centered at points
 
         for i, label in enumerate(self.labels):
             # labels points with condition labels
@@ -237,13 +246,12 @@ class MDS:
             # draw lines connecting all pairs
             if connect_line_color is None:
                 connect_line_color = "k"
-            get_coords = lambda lab: np.array((x[self.labels.index(lab)], y[self.labels.index(lab)], z[self.labels.index(lab)]))
-            for (lab1, lab2) in connect_pairs:
+            get_coords = lambda lab: np.array(
+                (x[self.labels.index(lab)], y[self.labels.index(lab)], z[self.labels.index(lab)])
+            )
+            for lab1, lab2 in connect_pairs:
                 xs, ys, zs = [(c1, c2) for c1, c2 in zip(get_coords(lab1), get_coords(lab2))]
-                ax.plot(xs, ys, zs, color=connect_line_color,linestyle='dashed',linewidth=2)
-
-
-
+                ax.plot(xs, ys, zs, color=connect_line_color, linestyle="dashed", linewidth=2)
 
         if hide_axes:
             ax.set_xticklabels([])

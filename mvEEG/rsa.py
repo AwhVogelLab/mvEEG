@@ -306,7 +306,7 @@ class RSA:
         )
         delay_summary_df = delay_summary_df[~(delay_summary_df.factor == "Total")]  # ignore total
 
-        ax.hlines(0, xmin=-0.5, xmax=3.5, color="black", linestyle="--")  # 0 line
+        ax.hlines(0, xmin=-0.5, xmax=len(fac_order) + 0.5, color="black", linestyle="--")  # 0 line
         ax = sns.barplot(
             data=delay_summary_df,
             x="factor",
@@ -437,7 +437,6 @@ class RSA:
 
             sig05 = corrected_p < 0.05
             print(f"{factor}: {sum(sig05)}/{len(sig05)} significant timepoints")
-
 
             ax.scatter(
                 self.t[self.t > 0][sig05],

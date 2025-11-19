@@ -15,17 +15,21 @@ dropped_chans_default = {
     "pupil": "ALL",
     "misc": "ALL",
 }
+
+
 class ERP:
-    def __init__(self,
-                  data_dir,
-                  experiment_name,
-                  included_subs: list | None = None,
-                  dropped_subs: list | None = None,
-                  dropped_chans: dict = dropped_chans_default,
-                  trial_phases: dict | None = None,
-                  reject: bool = True,
-                  colors: list = [f"C{i}" for i in range(10)]):
-        
+    def __init__(
+        self,
+        data_dir,
+        experiment_name,
+        included_subs: list | None = None,
+        dropped_subs: list | None = None,
+        dropped_chans: dict = dropped_chans_default,
+        trial_phases: dict | None = None,
+        reject: bool = True,
+        colors: list = [f"C{i}" for i in range(10)],
+    ):
+
         self.trial_phases = trial_phases
         self.colors = colors
 
@@ -41,7 +45,6 @@ class ERP:
             check=False,
         )
 
-
         dropped_subs = [] if dropped_subs is None else dropped_subs
         if included_subs is None:  # default to all subs
             self.subs = mne_bids.get_entity_vals(self.bids_path.root, "subject", ignore_subjects=dropped_subs)
@@ -55,13 +58,12 @@ class ERP:
 
         self.nsub = len(self.subs)
 
-        self.xdata_all = np.empty((self.nsub), dtype='object')
-        self.ydata_all = np.empty((self.nsub), dtype='object')
+        self.xdata_all = np.empty((self.nsub), dtype="object")
+        self.ydata_all = np.empty((self.nsub), dtype="object")
         for isub, sub in enumerate(self.subs):
             sub_path = self.bids_path.copy().update(subject=sub)
             epochs = mne.read_epochs(sub_path.update(suffix="eeg", extension=".fif").fpath)
             events = pd.read_csv(sub_path.update(suffix="events", extension=".tsv").fpath, sep="\t")
-
 
             # drop unwanted channels
             chans_to_drop = []
@@ -74,9 +76,12 @@ class ERP:
                     chans_to_drop.extend(self.dropped_chans[chan_type])
             epochs.drop_channels(chans_to_drop)
 
-            if isub == 0: # generate base values
+            if isub == 0:  # generate base values
                 self.times = np.array(epochs.times * 1000).astype(int)
-                self.condition_dict = {trial_type: events[events["trial_type"] == trial_type].value.iloc[0] for trial_type in events.trial_type.unique()}
+                self.condition_dict = {
+                    trial_type: events[events["trial_type"] == trial_type].value.iloc[0]
+                    for trial_type in events.trial_type.unique()
+                }
                 self.conditions = list(self.condition_dict.keys())
                 self.ch_names = epochs.ch_names
 
@@ -107,46 +112,45 @@ class ERP:
         """
 
         if group is None:
-            return xdata,ydata
-        
+            return xdata, ydata
+
         if "/" in group:
             group = group.split("/")
-        elif isinstance(group,str):
+        elif isinstance(group, str):
             group = [group]
-        
+
         labels = [cond for cond in self.conditions if all([subgroup in cond.split("/") for subgroup in group])]
         codes = [self.condition_dict[condition] for condition in labels]
         included_trials = np.in1d(ydata, codes)
 
         return xdata[included_trials], ydata[included_trials]
-    
-    def _select_electrodes(self,xdata,subset: str | list = None):
-        
+
+    def _select_electrodes(self, xdata, subset: str | list = None):
+
         if subset is None:
             return xdata
 
-        if isinstance(subset,str):
+        if isinstance(subset, str):
 
-            el_ix = np.in1d(self.ch_names,[ch for ch in self.ch_names if ch.startswith(subset)])
+            el_ix = np.in1d(self.ch_names, [ch for ch in self.ch_names if ch.startswith(subset)])
 
         elif len(subset) > 1:
             chans = np.concatenate([[ch for ch in self.ch_names if ch.startswith(ss)] for ss in subset])
-            el_ix = np.in1d(self.ch_names,chans) 
+            el_ix = np.in1d(self.ch_names, chans)
         else:
             raise ValueError("subset must be a string or list of strings")
-        
-        return xdata[:,el_ix,:]
-    
-    def plot_erp(self,condition_subsets,electrode_subsets,ax = None,labels = None,subs = None,trial_phases = None,ylim=None):
+
+        return xdata[:, el_ix, :]
+
+    def plot_erp(
+        self, condition_subsets, electrode_subsets, ax=None, labels=None, subs=None, trial_phases=None, ylim=None
+    ):
 
         if ax is None:
-            _,ax = plt.subplots()
-        
+            _, ax = plt.subplots()
+
         subs = np.arange(self.nsub) if subs is None else subs
         nsub = len(subs)
-
-
-        
 
         # equate lengths if unequal
         if len(condition_subsets) == 1 and len(electrode_subsets) > 1:
@@ -156,29 +160,30 @@ class ERP:
         elif len(electrode_subsets) == 1 and len(condition_subsets) > 1:
             electrode_subsets = electrode_subsets * len(condition_subsets)
             leg_labels = condition_subsets
-        
+
         elif len(condition_subsets) == len(electrode_subsets):
-            leg_labels = [f"({cond},{el})" for cond,el in zip(condition_subsets,electrode_subsets)]
+            leg_labels = [f"({cond},{el})" for cond, el in zip(condition_subsets, electrode_subsets)]
         else:
-            raise ValueError("condition_subsets and electrode_subsets must be of equal length or one must be of length 1")
+            raise ValueError(
+                "condition_subsets and electrode_subsets must be of equal length or one must be of length 1"
+            )
 
         labels = leg_labels if labels is None else labels
 
+        for i, (conds, els) in enumerate(zip(condition_subsets, electrode_subsets)):
 
-        for i,(conds,els) in enumerate(zip(condition_subsets,electrode_subsets)):
-
-            sub_erp = np.empty((nsub,len(self.times)))
+            sub_erp = np.empty((nsub, len(self.times)))
             for isub in range(nsub):
-                xdata,_ = self._select_conditions(self.xdata_all[subs[isub]],self.ydata_all[subs[isub]],group = conds)
-                xdata = self._select_electrodes(xdata,els)
+                xdata, _ = self._select_conditions(self.xdata_all[subs[isub]], self.ydata_all[subs[isub]], group=conds)
+                xdata = self._select_electrodes(xdata, els)
                 if len(xdata.shape) == 2:
-                    sub_erp = xdata.mean(1) # average across trials
+                    sub_erp = xdata.mean(1)  # average across trials
                 else:
-                    sub_erp[isub] = xdata.mean((0,1)) # average across times
-            
-            mean,upper,lower = get_plot_line(sub_erp)
-            ax.plot(self.times,mean,label = labels[i],color = self.colors[i])
-            ax.fill_between(self.times,upper,lower,alpha = 0.2,color = self.colors[i])
+                    sub_erp[isub] = xdata.mean((0, 1))  # average across times
+
+            mean, upper, lower = get_plot_line(sub_erp)
+            ax.plot(self.times, mean, label=labels[i], color=self.colors[i])
+            ax.fill_between(self.times, upper, lower, alpha=0.2, color=self.colors[i])
         plt.legend()
 
         ## Aesthetics
@@ -188,15 +193,4 @@ class ERP:
         ax.set_ylabel(r"ERP amplitude ($\mu$V)")
         ax.invert_yaxis()
         trial_phases = self.trial_phases if trial_phases is None else trial_phases
-        plot_trial_phases(ax,trial_phases,ax.get_ylim())
-
-
-
-
-
-                
-
-
-
-
-            
+        plot_trial_phases(ax, trial_phases, ax.get_ylim())

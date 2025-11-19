@@ -13,6 +13,7 @@ def get_plot_line(a):
     upper, lower = mean + sem, mean - sem
     return mean, upper, lower
 
+
 def _plot_single_phase(ax, phase_time, ylim, hide=False, color="gray", title=None, fontsize=16):
     """
     plots stim bar and does type checking.
@@ -51,6 +52,7 @@ def _plot_single_phase(ax, phase_time, ylim, hide=False, color="gray", title=Non
             color="black",
         )
 
+
 def plot_trial_phases(ax, trial_phases, ylim, hide=False):
     """
     Plots bars for multiple phases.
@@ -76,3 +78,20 @@ def plot_trial_phases(ax, trial_phases, ylim, hide=False):
         raise TypeError(
             "trial_phases should either be a dictionary, or an iterable of lists or tuples. If adding a single phase, use  plot_single_phase."
         )
+
+
+def pval_to_stars(p, thresholds={0.05: "*", 0.01: "**", 0.001: "***"}):
+    """
+    Converts p-value to a string of stars.
+
+    Args:
+        p (float): p-value to convert.
+        thresholds (dict): Dictionary mapping p-value thresholds to star strings.
+
+    Returns:
+        str: Corresponding star string for the p-value.
+    """
+    for threshold, stars in sorted(thresholds.items()):
+        if p < threshold:
+            return stars
+    return "n.s"  # Not significant

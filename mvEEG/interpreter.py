@@ -5,8 +5,9 @@ import seaborn as sns
 import scipy.stats as sista
 from statsmodels.stats.multitest import multipletests
 from .dataloader import DataLoader
-from .plot_utils import get_plot_line, plot_trial_phases
+from .plot_utils import get_plot_line, plot_trial_phases, pval_to_stars
 import pingouin as pg
+from mne.stats import permutation_cluster_1samp_test
 
 mpl.rcParams["font.sans-serif"] = "Arial"
 mpl.rcParams["font.family"] = "sans-serif"
@@ -67,6 +68,7 @@ class Interpreter:
         labels: list,
         data_dir: str,
         experiment_name: str,
+        data_type: str = "classification",
         descriptions: list | None = None,
         subs: list | None = None,
         trial_phases: dict | None = None,
@@ -74,7 +76,7 @@ class Interpreter:
 
         self.dataset = DataLoader(
             root_dir=data_dir,
-            data_type="classification",
+            data_type=data_type,
             experiment_name=experiment_name,
             descriptions=descriptions,
             subs=subs,
@@ -83,7 +85,6 @@ class Interpreter:
         self.labels = labels
         self.colors = ["royalblue", "firebrick", "forestgreen", "orange", "purple", "cyan"]
         self.trial_phases = trial_phases
-
 
     @staticmethod
     def do_significance_testing(t, a, b=0, test=None, alternative="two-sided", correction_method="fdr_bh"):
@@ -250,6 +251,7 @@ class Interpreter:
             subplot_shape = (1, acc.shape[0])
 
         fig, axes = plt.subplots(subplot_shape[0], subplot_shape[1], figsize=(15, 5))
+        axes = axes.flatten()
 
         for i in range(acc.shape[0]):
             acc_sub = acc[i]
@@ -313,7 +315,6 @@ class Interpreter:
         legend_pos="lower right",
         label_text_x=-105,
         label_text_ys=(-3.4, 2.8),
-        stim_label_xy=(100, 3.5),
         arrow_ys=(-1.1, 1.2),
         arrow_labels=None,
         significance_testing=False,
@@ -346,8 +347,6 @@ class Interpreter:
             X-coordinate for the label text. Default is -105.
         label_text_ys : list, optional
             Y-coordinates for the label text. Default is [-3.4, 2.8].
-        stim_label_xy : list, optional
-            Coordinates for the stimulus label. Default is [100, 3.5].
         arrow_ys : list, optional
             Y-coordinates for the arrows. Default is [-1.1, 1.2].
         arrow_labels : list, optional
@@ -432,23 +431,23 @@ class Interpreter:
         if arrow_labels is None:
             arrow_labels = [labels[0], labels[1]]
 
-        plt.text(
-            label_text_x,
-            label_text_ys[0],
-            f"Predicted\n{arrow_labels[0]}",
-            fontsize=12,
-            ha="center",
-        )
-        plt.text(
-            label_text_x,
-            label_text_ys[1],
-            f"Predicted\n{arrow_labels[1]}",
-            fontsize=12,
-            ha="center",
-        )
-        plt.text(stim_label_xy[0], stim_label_xy[1], "Stim", fontsize=14, ha="center", c="k")
-        plt.arrow(label_text_x, arrow_ys[0], 0, -1, head_width=45, head_length=0.25, color="k")
-        plt.arrow(label_text_x, arrow_ys[1], 0, 1, head_width=45, head_length=0.25, color="k")
+        if label_text_ys is not None:
+            plt.text(
+                label_text_x,
+                label_text_ys[0],
+                f"Predicted\n{arrow_labels[0]}",
+                fontsize=12,
+                ha="center",
+            )
+            plt.text(
+                label_text_x,
+                label_text_ys[1],
+                f"Predicted\n{arrow_labels[1]}",
+                fontsize=12,
+                ha="center",
+            )
+            plt.arrow(label_text_x, arrow_ys[0], 0, -1, head_width=45, head_length=0.25, color="k")
+            plt.arrow(label_text_x, arrow_ys[1], 0, 1, head_width=45, head_length=0.25, color="k")
 
     def _get_pair_from_label(self, pair):
         """
@@ -718,7 +717,9 @@ class Interpreter:
         pairs,
         labels,
         t_start=200,
+        t_end=None,
         ax=None,
+        significance_testing=False,
         significance_between=False,
         sig_y=1,
         test_tail="two-sided",
@@ -754,9 +755,12 @@ class Interpreter:
         pair0 = self._get_pair_from_label(pairs[0])
         pair1 = self._get_pair_from_label(pairs[1])
 
+        t_end = t[-1] + 1 if t_end is None else t_end
+        t_ix = np.logical_and(t > t_start, t < t_end)
+
         contrasts = [
-            np.mean(cs1[:, :, pair0[1]][..., t > t_start] - cs1[:, :, pair0[0]][..., t > t_start], axis=(1, 2)),
-            np.mean(cs2[:, :, pair1[1]][..., t > t_start] - cs2[:, :, pair1[0]][..., t > t_start], axis=(1, 2)),
+            np.mean(cs1[:, :, pair0[1]][..., t_ix] - cs1[:, :, pair0[0]][..., t_ix], axis=(1, 2)),
+            np.mean(cs2[:, :, pair1[1]][..., t_ix] - cs2[:, :, pair1[0]][..., t_ix], axis=(1, 2)),
         ]
 
         ax = sns.barplot(data=contrasts, errorbar="se", ax=ax, **kwargs)
@@ -768,20 +772,129 @@ class Interpreter:
 
         plt.tight_layout()
 
-        stats = pg.ttest(contrasts[0], contrasts[1], paired=True, alternative=test_tail)
-        p = stats["p-val"].values[0]
+        if significance_testing:
+            for i, contrast in enumerate(contrasts):
+                stats = pg.ttest(contrast, 0)
+                print(pairs[i], stats)
+                p = stats["p-val"].values[0]
+                ax.text(i, sig_y + 0.05, f'p={round(p,3)}\nBF10 = {stats["BF10"].values[0]}', ha="center")
 
         if significance_between:
+
+            sig_y = sig_y + 0.5 if significance_testing else sig_y
+            stats = pg.ttest(contrasts[0], contrasts[1], paired=True, alternative=test_tail)
+            p = stats["p-val"].values[0]
             ax.plot([0, 1], [sig_y, sig_y], "k")
 
-            if p > 0.05:
-                stars = "n.s."
-            elif p > 0.01:
-                stars = "*"
-            elif p > 0.001:
-                stars = "**"
-            else:
-                stars = "***"
             ax.set_title(title)
-            ax.text(0.5, sig_y + 0.05, f'{stars}\nBF10 = {stats["BF10"].values[0]}', ha="center")
-            print(stats)
+            ax.text(0.5, sig_y + 0.05, f'p = {round(p,3)}\nBF10 = {stats["BF10"].values[0]}', ha="center")
+            print("Between:", stats)
+
+    ## temp gen functions
+
+    def plot_temp_gen(
+        self,
+        dset: str | None,
+        key: str = "confidenceScores",
+        pair: list | tuple | None = None,
+        label: str | int | None = None,
+        trial_phases: dict | None = None,
+        null_metric: int | str | np.ndarray = 0,
+        significance_testing: bool = False,
+        test_tail: int = 0,
+        cluster_kwargs: dict | None = None,
+        **kwargs,
+    ):
+        """
+        Plots a temporal generalization heatmap for a given dataset.
+
+        Arguments:
+        ----------
+        dset (str or None): dataset to get data from
+        key (str): identifier for which analysis to retrieve (defaults to hyperplane distances)
+        pair (list or tuple or None): pair of conditions to contrast. If None, label must be provided
+        label (str or int or None): single condition to plot. If None, pair must be provided
+        trial_phases (dict or None): trial phases dict
+        null_metric (float or ndarray): value to use as null metric for significance testing
+        significance_testing (bool): whether to perform significance testing
+        cluster_kwargs (dict or None): additional kwargs to pass to the cluster line collection
+        **kwargs: additional kwargs to pass to sns.heatmap
+
+
+        """
+
+        tg_data, t = self.dataset.get_data(dset, keys=[key, "times"])
+
+        if pair is None and label is not None:
+            label = self._get_pair_from_label([label])[0]
+            tg_data = tg_data[:, :, label]
+
+        elif pair is not None and label is None:
+            pair = self._get_pair_from_label(pair)
+            tg_data = tg_data[:, :, pair[1]] - tg_data[:, :, pair[0]]
+
+        elif pair is not None and label is not None:
+            raise ValueError("Must provide either pair or label (or neither), not both")
+
+        tg_data = tg_data.mean(1)  # average over iterations
+        ax = sns.heatmap(tg_data.mean(0), **kwargs)
+
+        trial_phases = self.trial_phases if trial_phases is None else trial_phases
+        convert_t = lambda i: ((i - t[0]) / (t[-1] - t[0])) * (len(t) - 1)  # convert to place in scale
+
+        # ticks at multiples of 250ms
+
+        tick_multiplier = 250
+        ticks = t[np.where(t % tick_multiplier == min(t % tick_multiplier))[0]]
+        ax.set_xticks([convert_t(tick) for tick in ticks], labels=ticks)
+        ax.set_yticks([convert_t(tick) for tick in ticks], labels=ticks)
+        xlim = ax.get_xlim()
+        ylim = ax.get_ylim()
+        for phase, (t0, t1) in trial_phases.items():
+            ax.vlines(convert_t(t0), *ylim, colors="w", linestyles="--", linewidth=0.5)
+            ax.vlines(convert_t(t1), *ylim, colors="w", linestyles="--", linewidth=0.5)
+            ax.hlines(convert_t(t0), *xlim, colors="w", linestyles="--", linewidth=0.5)
+            ax.hlines(convert_t(t1), *xlim, colors="w", linestyles="--", linewidth=0.5)
+
+            ax.text(convert_t(np.mean([t0, t1])), ylim[1] - 1, phase, color="k", ha="center", va="bottom", fontsize=12)
+
+        ax.plot((0, len(t)), (0, len(t)), "w--", linewidth=0.5)
+
+        if significance_testing:
+
+            if type(null_metric) == str:
+                null_metric = self.dataset.get_data(dset, keys=null_metric).mean(1)
+
+            _, clusters, cluster_p, _ = permutation_cluster_1samp_test(
+                tg_data - null_metric,
+                tail=test_tail,
+                n_permutations=5000,
+            )
+            lines = []
+            for i, cluster in enumerate(clusters):
+
+                if cluster_p[i] < 0.05:
+                    print(cluster_p[i])
+                    mask = np.zeros(tg_data.shape[1:], dtype=bool)
+                    mask[cluster] = True
+                    mask = mask.T  # transpose to align with the plot
+                    for px in range(130):
+                        for py in range(130):
+                            if mask[px, py] and not mask[px - 1, py]:
+                                lines.append([[px - 0.5, py - 0.5], [px - 0.5, py + 0.5]])
+                            if mask[px, py] and not mask[px + 1, py]:
+                                lines.append([[px + 0.5, py - 0.5], [px + 0.5, py + 0.5]])
+                            if mask[px, py] and not mask[px, py - 1]:
+                                lines.append([[px - 0.5, py - 0.5], [px + 0.5, py - 0.5]])
+                            if mask[px, py] and not mask[px, py + 1]:
+                                lines.append([[px - 0.5, py + 0.5], [px + 0.5, py + 0.5]])
+
+            if len(lines) > 0:
+                lc = (
+                    mpl.collections.LineCollection(lines, **cluster_kwargs)
+                    if cluster_kwargs is not None
+                    else mpl.collections.LineCollection(lines, colors="w")
+                )
+                ax.add_collection(lc)
+
+        return ax, clusters, cluster_p

@@ -10,7 +10,7 @@ mne.set_log_level("ERROR")
 
 RANDOM_SEED = 42
 dropped_chans_default = {
-    "eeg": [],
+    "eeg": ["TP9"],
     "eog": "ALL",
     "eyegaze": "ALL",
     "pupil": "ALL",
@@ -205,8 +205,8 @@ class Wrangler:
 
         if self.trim_timepoints is not None:  # crop trial duration
             epochs.crop(
-                tmin=self.trim_timepoints[0],
-                tmax=self.trim_timepoints[1],
+                tmin=self.trim_timepoints[0] / 1000,
+                tmax=self.trim_timepoints[1] / 1000,
                 include_tmax=False,
             )
 
