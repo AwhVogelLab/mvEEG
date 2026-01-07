@@ -59,10 +59,10 @@ class Wrangler:
         t_step: int = 25,
         trial_bin_size: int = 20,
         n_folds: int = 100,
-        condition_dict: dict = None,
-        conditions: list = None,
-        training_groups: list = None,
-        testing_groups: list = None,
+        condition_dict: dict | None = None,
+        conditions: list | None = None,
+        training_groups: list | None = None,
+        testing_groups: list | None = None,
     ):
         self.data_dir = data_dir
         self.experiment_name = experiment_name
@@ -174,7 +174,7 @@ class Wrangler:
         return chans_to_drop
 
     def load_eeg(
-        self, isub, drop_chans_manual=[], reject=True, time_bin=True, select_from_labels=True, selection_kwargs=None
+        self, isub, drop_chans_manual=None, reject=True, time_bin=True, select_from_labels=True, selection_kwargs=None
     ):
         """
         Function to load in EEG data for a given subject and do basic preprocessing
@@ -198,7 +198,8 @@ class Wrangler:
 
         # drop unwanted channels
         chans_to_drop = self.get_drop_chans(epochs)
-        chans_to_drop.extend(drop_chans_manual)
+        if drop_chans_manual is not None:
+            chans_to_drop.extend(drop_chans_manual)
 
         chans_to_drop = [chan for chan in chans_to_drop if chan in epochs.ch_names]
         epochs.drop_channels(chans_to_drop)
@@ -207,7 +208,7 @@ class Wrangler:
             epochs.crop(
                 tmin=self.trim_timepoints[0] / 1000,
                 tmax=self.trim_timepoints[1] / 1000,
-                include_tmax=False,
+                include_tmax=True,
             )
 
         if reject:  # drop artifact marked trials
