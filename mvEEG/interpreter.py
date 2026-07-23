@@ -87,22 +87,64 @@ class Interpreter:
         self.trial_phases = trial_phases
 
     @staticmethod
-    def do_significance_testing(t, a, b=0, test=None, alternative="two-sided", correction_method="fdr_bh"):
+    def do_significance_testing(
+        t, a, b=0, test=None, alternative="two-sided", correction_method="fdr_bh",
+        sig_test="pointwise", sig_test_kwargs=None,
+    ):
         """
         Perform significance testing on the provided data.
         Parameters:
         t (array-like): Time points corresponding to the data.
-        a (array-like): Data array to test.
-        b (array-like, optional): Baseline or comparison data. Default is 0.
-        test (callable, optional): Statistical test function to use. Default is None.
+        a (array-like, shape (n_subs, n_times)): Data array to test.
+        b (array-like or scalar, optional): Baseline or comparison data. Default is 0.
+        test (callable, optional): Statistical test function to use (pointwise path only). Default is None.
         alternative (str, optional): Defines the alternative hypothesis. Options are "two-sided", "less", or "greater". Default is "two-sided".
-        correction_method (str, optional): Method for multiple testing correction. Default is "fdr_bh".
+        correction_method (str, optional): Method for multiple testing correction (pointwise path only). Default is "fdr_bh".
+        sig_test (str, optional): Which test to run. One of:
+            "pointwise" — per-timepoint t-test + FDR/FWER correction (default, original behavior)
+            "cluster"   — MNE cluster permutation test (mne.stats.permutation_cluster_1samp_test)
+        sig_test_kwargs (dict, optional): Extra kwargs forwarded to the chosen test:
+            "pointwise": (none currently used beyond correction_method)
+            "cluster":   n_permutations (int, default 1000), cluster_alpha (float, default 0.05)
         Returns:
         A tuple containing:
-            - p (array-like): p-values after testing and correction.
-            - sig05 (array-like): Boolean array indicating significance at the 0.05 level.
+            - p (array-like): p-values (or per-cluster p-values broadcast to each timepoint in "cluster" mode).
+            - sig05 (array-like): Boolean array indicating significance at the 0.05 (or cluster_alpha) level.
         """
+        if sig_test_kwargs is None:
+            sig_test_kwargs = {}
 
+        t_mask = t > 0
+
+        if sig_test == "cluster":
+            # cluster permutation test on the subject-level difference scores
+            # (a vs. b), restricted to timepoints after stimulus onset (t > 0)
+            a_post = a[:, t_mask]
+            diff = a_post - b if isinstance(b, (int, float)) else a_post - b[:, t_mask]
+
+            n_permutations = sig_test_kwargs.get("n_permutations", 1000)
+            cluster_alpha = sig_test_kwargs.get("cluster_alpha", 0.05)
+            tail_map = {"two-sided": 0, "greater": 1, "less": -1}
+            tail = tail_map.get(alternative, 0)
+
+            _, clusters, cluster_pv, _ = permutation_cluster_1samp_test(
+                diff,
+                n_permutations=n_permutations,
+                tail=tail,
+                threshold=None,
+                verbose=False,
+            )
+
+            n_post = diff.shape[1]
+            p = np.ones(n_post)
+            sig05 = np.zeros(n_post, dtype=bool)
+            for cluster, pval in zip(clusters, cluster_pv):
+                p[cluster[0]] = pval
+                sig05[cluster[0]] = pval < cluster_alpha
+
+            return p, sig05
+
+        # ── pointwise t-test (default, original behavior) ────────────────────
         if test is None:
             if type(b) == int or type(b) == float:
                 test = sista.ttest_1samp
@@ -110,7 +152,7 @@ class Interpreter:
                 test = sista.ttest_rel
 
         _, p = test(a, b, alternative=alternative)
-        p = p[t > 0]  # only select out times > 0
+        p = p[t_mask]  # only select out times > 0
         if correction_method is not None:
             _, p, _, _ = multipletests(p, alpha=0.05, method=correction_method)
 
@@ -133,6 +175,8 @@ class Interpreter:
         sig_y=None,
         label=None,
         trial_phases=None,
+        sig_test="pointwise",
+        sig_test_kwargs=None,
     ):
         """
         Plots accuracy for one subject for one condition
@@ -150,6 +194,8 @@ class Interpreter:
         color (str): color of line
         sig_y (float): y position of significance dots
         label (str): label of line
+        sig_test (str): "pointwise" (default) or "cluster" - see do_significance_testing
+        sig_test_kwargs (dict): extra kwargs forwarded to do_significance_testing
         """
 
         # extract values and average over iterations
@@ -174,7 +220,10 @@ class Interpreter:
         ax.fill_between(t, acc_shuff_upper, acc_shuff_lower, color="gray", alpha=0.5)
 
         if significance_testing:
-            p, sig05 = self.do_significance_testing(t, acc, acc_shuff, alternative="greater")
+            p, sig05 = self.do_significance_testing(
+                t, acc, acc_shuff, alternative="greater",
+                sig_test=sig_test, sig_test_kwargs=sig_test_kwargs,
+            )
             ax.scatter(
                 t[t > 0][sig05],
                 np.full(sum(sig05), sig_y),
@@ -224,6 +273,8 @@ class Interpreter:
         sig_y=None,
         label=None,
         trial_phases=None,
+        sig_test="pointwise",
+        sig_test_kwargs=None,
     ):
         """
         Plots accuracy for one subject for one condition
@@ -241,6 +292,11 @@ class Interpreter:
         color (str): color of line
         sig_y (float): y position of significance dots
         label (str): label of line
+        sig_test (str): "pointwise" (default) or "cluster" - see do_significance_testing.
+            Note: this plots one subject at a time, so "cluster" testing here is
+            over whatever the leading dimension of the per-subject data is
+            (e.g. cross-validation iterations), not across subjects.
+        sig_test_kwargs (dict): extra kwargs forwarded to do_significance_testing
         """
 
         # extract values and average over iterations
@@ -271,7 +327,10 @@ class Interpreter:
             ax.fill_between(t, acc_shuff_upper, acc_shuff_lower, color="gray", alpha=0.5)
 
             if significance_testing:
-                p, sig05 = self.do_significance_testing(t, acc_sub, acc_shuff_sub, alternative="greater")
+                p, sig05 = self.do_significance_testing(
+                    t, acc_sub, acc_shuff_sub, alternative="greater",
+                    sig_test=sig_test, sig_test_kwargs=sig_test_kwargs,
+                )
                 ax.scatter(
                     t[t > 0][sig05],
                     np.full(sum(sig05), sig_y),
@@ -323,6 +382,8 @@ class Interpreter:
         alternatives=["greater"],
         sig_colors=["C0"],
         trial_phases=None,
+        sig_test="pointwise",
+        sig_test_kwargs=None,
     ):
         """
         Plots the hyperplane for the given dataset and labels.
@@ -361,6 +422,10 @@ class Interpreter:
             List of alternative hypotheses for significance testing. Default is ["greater"].
         sig_colors : list, optional
             Colors for significance markers. Default is ["C0"].
+        sig_test : str, optional
+            "pointwise" (default) or "cluster" - see do_significance_testing.
+        sig_test_kwargs : dict, optional
+            Extra kwargs forwarded to do_significance_testing.
 
         """
 
@@ -412,6 +477,8 @@ class Interpreter:
                     confidence_scores[:, pair[0]],
                     confidence_scores[:, pair[1]],
                     alternative=alternative,
+                    sig_test=sig_test,
+                    sig_test_kwargs=sig_test_kwargs,
                 )
                 ax.scatter(
                     t[t > 0][sig05],
@@ -421,9 +488,10 @@ class Interpreter:
                     marker="s",
                     zorder=999,
                 )
+                pair_labels = [self.labels[pair[0]], self.labels[pair[1]]]  # (brecken) use self.labels, not the local `labels` param, so this stays correct even when `labels` is a subset (e.g. stepped hyperplane reveal)
                 print(
-                    f"% timepoints significant for {labels[pair[0]]} vs {labels[pair[1]]} (alternative = {alternative}): {round(sum(sig05)/len(sig05)*100,2)} ({sum(sig05)}/{len(sig05)})%"
-                )
+                    f"% timepoints significant for {pair_labels[0]} vs {pair_labels[1]} (alternative = {alternative}): {round(sum(sig05)/len(sig05)*100,2)} ({sum(sig05)}/{len(sig05)})%"
+                ) # brecken
 
         plt.title(title, fontsize=18)
         plt.xlabel("Time from stimulus onset (ms)", fontsize=14)
@@ -478,6 +546,8 @@ class Interpreter:
         sig_y=None,
         label=None,
         trial_phases=None,
+        sig_test="pointwise",
+        sig_test_kwargs=None,
     ):
         """
         Plots accuracy for one subject for one condition
@@ -494,6 +564,8 @@ class Interpreter:
         color (str): color of line
         sig_y (float): y position of significance dots
         label (str): label of line
+        sig_test (str): "pointwise" (default) or "cluster" - see do_significance_testing
+        sig_test_kwargs (dict): extra kwargs forwarded to do_significance_testing
         """
 
         pair = self._get_pair_from_label(pair)
@@ -512,7 +584,10 @@ class Interpreter:
         ax.fill_between(t, upper, lower, color=color, alpha=0.5)
 
         if significance_testing:
-            p, sig05 = self.do_significance_testing(t, contrast, 0, alternative="greater")
+            p, sig05 = self.do_significance_testing(
+                t, contrast, 0, alternative="greater",
+                sig_test=sig_test, sig_test_kwargs=sig_test_kwargs,
+            )
             ax.scatter(
                 t[t > 0][sig05],
                 np.full(sum(sig05), sig_y),
@@ -639,6 +714,8 @@ class Interpreter:
         sig_color="C2",
         test_tail="two-sided",
         sig_ys=(-0.5, -0.6),
+        sig_test_between="pointwise",
+        sig_test_kwargs_between=None,
         **kwargs,
     ):
         """
@@ -657,7 +734,13 @@ class Interpreter:
         sig_color (str): color of significance dots
         test_tail (str): tail of the test to run
         sig_ys (list of 2 floats): y position of significance dots for
-        Other kwargs are passed to plot_hyperplane_contrast
+        sig_test_between (str): "pointwise" (default) or "cluster" - test type used for the
+            significance_between comparison (does NOT affect each individual contrast's own
+            sig_test, which is passed via **kwargs straight to plot_hyperplane_contrast)
+        sig_test_kwargs_between (dict): extra kwargs forwarded to do_significance_testing
+            for the significance_between comparison
+        Other kwargs (including sig_test / sig_test_kwargs for each individual contrast)
+        are passed to plot_hyperplane_contrast
 
 
         """
@@ -699,7 +782,10 @@ class Interpreter:
             contrast_1 = np.mean(cs1[:, :, pair0[1]] - cs1[:, :, pair0[0]], axis=1)
             contrast_2 = np.mean(cs2[:, :, pair1[1]] - cs2[:, :, pair1[0]], axis=1)
 
-            p, sig05 = self.do_significance_testing(t, contrast_1, contrast_2, alternative=test_tail)
+            p, sig05 = self.do_significance_testing(
+                t, contrast_1, contrast_2, alternative=test_tail,
+                sig_test=sig_test_between, sig_test_kwargs=sig_test_kwargs_between,
+            )
             ax.scatter(
                 t[t > 0][sig05],
                 np.full(sum(sig05), sig_y_between),
