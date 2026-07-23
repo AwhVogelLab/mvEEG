@@ -505,10 +505,10 @@ class Interpreter:
                 pair_labels = [
                     self.labels[pair[0]],
                     self.labels[pair[1]],
-                ]  # (brecken) use self.labels, not the local `labels` param, so this stays correct even when `labels` is a subset (e.g. stepped hyperplane reveal)
+                ]  # use self.labels, not the local `labels` param, so this stays correct even when `labels` is a subset (e.g. stepped hyperplane reveal)
                 print(
                     f"% timepoints significant for {pair_labels[0]} vs {pair_labels[1]} (alternative = {alternative}): {round(sum(sig05)/len(sig05)*100,2)} ({sum(sig05)}/{len(sig05)})%"
-                )  # brecken
+                )
 
         plt.title(title, fontsize=18)
         plt.xlabel("Time from stimulus onset (ms)", fontsize=14)
