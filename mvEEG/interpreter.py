@@ -88,8 +88,14 @@ class Interpreter:
 
     @staticmethod
     def do_significance_testing(
-        t, a, b=0, test=None, alternative="two-sided", correction_method="fdr_bh",
-        sig_test="pointwise", sig_test_kwargs=None,
+        t,
+        a,
+        b=0,
+        test=None,
+        alternative="two-sided",
+        correction_method="fdr_bh",
+        sig_test="pointwise",
+        sig_test_kwargs=None,
     ):
         """
         Perform significance testing on the provided data.
@@ -221,8 +227,12 @@ class Interpreter:
 
         if significance_testing:
             p, sig05 = self.do_significance_testing(
-                t, acc, acc_shuff, alternative="greater",
-                sig_test=sig_test, sig_test_kwargs=sig_test_kwargs,
+                t,
+                acc,
+                acc_shuff,
+                alternative="greater",
+                sig_test=sig_test,
+                sig_test_kwargs=sig_test_kwargs,
             )
             ax.scatter(
                 t[t > 0][sig05],
@@ -328,8 +338,12 @@ class Interpreter:
 
             if significance_testing:
                 p, sig05 = self.do_significance_testing(
-                    t, acc_sub, acc_shuff_sub, alternative="greater",
-                    sig_test=sig_test, sig_test_kwargs=sig_test_kwargs,
+                    t,
+                    acc_sub,
+                    acc_shuff_sub,
+                    alternative="greater",
+                    sig_test=sig_test,
+                    sig_test_kwargs=sig_test_kwargs,
                 )
                 ax.scatter(
                     t[t > 0][sig05],
@@ -488,10 +502,13 @@ class Interpreter:
                     marker="s",
                     zorder=999,
                 )
-                pair_labels = [self.labels[pair[0]], self.labels[pair[1]]]  # (brecken) use self.labels, not the local `labels` param, so this stays correct even when `labels` is a subset (e.g. stepped hyperplane reveal)
+                pair_labels = [
+                    self.labels[pair[0]],
+                    self.labels[pair[1]],
+                ]  # (brecken) use self.labels, not the local `labels` param, so this stays correct even when `labels` is a subset (e.g. stepped hyperplane reveal)
                 print(
                     f"% timepoints significant for {pair_labels[0]} vs {pair_labels[1]} (alternative = {alternative}): {round(sum(sig05)/len(sig05)*100,2)} ({sum(sig05)}/{len(sig05)})%"
-                ) # brecken
+                )  # brecken
 
         plt.title(title, fontsize=18)
         plt.xlabel("Time from stimulus onset (ms)", fontsize=14)
@@ -585,8 +602,12 @@ class Interpreter:
 
         if significance_testing:
             p, sig05 = self.do_significance_testing(
-                t, contrast, 0, alternative="greater",
-                sig_test=sig_test, sig_test_kwargs=sig_test_kwargs,
+                t,
+                contrast,
+                0,
+                alternative="greater",
+                sig_test=sig_test,
+                sig_test_kwargs=sig_test_kwargs,
             )
             ax.scatter(
                 t[t > 0][sig05],
@@ -783,8 +804,12 @@ class Interpreter:
             contrast_2 = np.mean(cs2[:, :, pair1[1]] - cs2[:, :, pair1[0]], axis=1)
 
             p, sig05 = self.do_significance_testing(
-                t, contrast_1, contrast_2, alternative=test_tail,
-                sig_test=sig_test_between, sig_test_kwargs=sig_test_kwargs_between,
+                t,
+                contrast_1,
+                contrast_2,
+                alternative=test_tail,
+                sig_test=sig_test_between,
+                sig_test_kwargs=sig_test_kwargs_between,
             )
             ax.scatter(
                 t[t > 0][sig05],
