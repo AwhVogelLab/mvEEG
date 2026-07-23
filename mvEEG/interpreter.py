@@ -7,7 +7,7 @@ from statsmodels.stats.multitest import multipletests
 from .dataloader import DataLoader
 from .plot_utils import get_plot_line, plot_trial_phases, pval_to_stars
 import pingouin as pg
-from mne.stats import permutation_cluster_1samp_test
+from mne.stats import permutation_cluster_1samp_test  # used by do_significance_testing's optional sig_test="cluster" mode
 
 mpl.rcParams["font.sans-serif"] = "Arial"
 mpl.rcParams["font.family"] = "sans-serif"
