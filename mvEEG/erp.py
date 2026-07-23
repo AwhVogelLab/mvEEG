@@ -7,7 +7,6 @@ import seaborn as sns
 from collections import defaultdict
 from .plot_utils import plot_trial_phases, get_plot_line
 
-
 dropped_chans_default = {
     "eeg": [],
     "eog": "ALL",
